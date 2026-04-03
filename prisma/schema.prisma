@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Shopify Session (required by @shopify/shopify-app-session-storage-prisma) ───
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// ─── Shop ───
+
+model Shop {
+  id              String          @id @default(cuid())
+  domain          String          @unique // e.g. "my-store.myshopify.com"
+  accessToken     String
+  arcadeAccountId String?         // linked Arcade account (auto-provisioned or matched)
+  email           String?
+  name            String?
+  installedAt     DateTime        @default(now())
+  uninstalledAt   DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  products ArcadeProduct[]
+  orders   ArcadeOrder[]
+}
+
+// ─── Product Categories & Types ───
+
+model ProductCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productTypes ProductType[]
+}
+
+model ProductType {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  specs          String?  // e.g. "18x18\", 100% polyester"
+  basePrice      Decimal  @db.Decimal(10, 2)
+  sizeOptions    Json     @default("[]") // e.g. ["11x11\"", "16x16\"", "18x18\"", "20x20\""]
+  fabricOptions  Json     @default("[]") // e.g. ["Cotton Canvas", "Linen", "Velvet"]
+  imageUrl       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  categoryId     String
+  category       ProductCategory @relation(fields: [categoryId], references: [id])
+
+  manufacturerId String?
+  manufacturer   Manufacturer?   @relation(fields: [manufacturerId], references: [id])
+
+  products ArcadeProduct[]
+
+  @@index([categoryId])
+}
+
+// ─── Arcade Products (designed in-app) ───
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+}
+
+model ArcadeProduct {
+  id                String        @id @default(cuid())
+  designPrompt      String?
+  imageUrls         Json          @default("[]") // AI-generated imagery URLs
+  shopifyProductGid String?       // e.g. "gid://shopify/Product/12345"
+  status            ProductStatus @default(DRAFT)
+  title             String?
+  description       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  shopId        String
+  shop          Shop        @relation(fields: [shopId], references: [id])
+
+  productTypeId String
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+
+  variants ProductVariant[]
+
+  @@index([shopId])
+  @@index([productTypeId])
+}
+
+model ProductVariant {
+  id            String  @id @default(cuid())
+  size          String  // e.g. "18x18\""
+  fabric        String  // e.g. "Cotton Canvas"
+  productCost   Decimal @db.Decimal(10, 2) // manufacturer cost
+  retailPrice   Decimal @db.Decimal(10, 2) // merchant's selling price
+  markupPercent Decimal @db.Decimal(5, 2)  // markup percentage
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  arcadeProductId String
+  arcadeProduct   ArcadeProduct @relation(fields: [arcadeProductId], references: [id], onDelete: Cascade)
+
+  @@index([arcadeProductId])
+}
+
+// ─── Orders ───
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model ArcadeOrder {
+  id                  String            @id @default(cuid())
+  shopifyOrderId      String
+  shopifyOrderNumber  String?
+  customerName        String?
+  customerEmail       String?
+  totalPrice          Decimal           @db.Decimal(10, 2)
+  paymentStatus       PaymentStatus     @default(PENDING)
+  fulfillmentStatus   FulfillmentStatus @default(UNFULFILLED)
+  trackingNumber      String?
+  trackingUrl         String?
+  carrierName         String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  shopId         String
+  shop           Shop          @relation(fields: [shopId], references: [id])
+
+  manufacturerId String?
+  manufacturer   Manufacturer? @relation(fields: [manufacturerId], references: [id])
+
+  @@index([shopId])
+  @@index([shopifyOrderId])
+}
+
+// ─── Manufacturers ───
+
+model Manufacturer {
+  id                 String   @id @default(cuid())
+  name               String
+  capabilities       Json     @default("[]") // e.g. ["pillows", "table_linens", "curtains"]
+  fulfillmentCapacity Int     @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  productTypes ProductType[]
+  orders       ArcadeOrder[]
+}
