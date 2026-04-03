@@ -1,12 +1,12 @@
 # Arcade x Shopify App
 
-A fully embedded Shopify app that lets merchants browse product categories, design AI-generated products, and push manufacturer-ready listings directly to their Shopify store — all without leaving the Shopify Admin.
+A fully embedded Shopify app that lets merchants browse a visual grid of home textile product categories, design AI-generated products via structured prompts, configure per-variant pricing and markup, and publish manufacturer-ready listings directly to their Shopify store — all without leaving the Shopify Admin.
 
 Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com/printful), with three key differences:
 
 - Arcade's manufacturer network produces a far broader range of product types beyond printed goods
-- Product design is AI-generated entirely within the embedded experience
-- Predefined product categories align designs with manufacturer capabilities from the start
+- Product design is AI-generated entirely within the embedded experience — no artwork upload needed
+- A visual grid of product categories (v1: home textiles) aligns designs with manufacturer capabilities from the start
 
 ## Tech Stack
 
@@ -23,16 +23,17 @@ Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│              SHOPIFY ADMIN (iframe)               │
-│  ┌────────────────────────────────────────────┐  │
-│  │    Arcade Embedded App (Remix + Polaris)    │  │
-│  │                                             │  │
-│  │  Categories → Product Type → AI Design      │  │
-│  │  → Publish to Store                         │  │
-│  │  Orders Dashboard                           │  │
-│  └────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│                 SHOPIFY ADMIN (iframe)                 │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │      Arcade Embedded App (Remix + Polaris)      │  │
+│  │                                                  │  │
+│  │  Onboarding → Category Grid → Product Type      │  │
+│  │  → Prompt Design → AI Design (PDP)              │  │
+│  │  → Pricing Config → Publish to Store            │  │
+│  │  Orders Dashboard (tabbed) · Edit Product       │  │
+│  └─────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────┘
           │                          │
      App Bridge                Session Token
      Navigation                    Auth
@@ -55,37 +56,109 @@ Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com
 
 ## Core User Flows
 
-### 1. Install & Account Provisioning
-Merchant installs from Shopify App Store → OAuth handshake → Arcade account auto-provisioned (or linked if email matches) → merchant lands in embedded app, never leaving Shopify Admin.
+### 1. Install & Account Provisioning (Journey A + B)
 
-### 2. Browse & Design
-Merchant browses predefined product categories (Apparel, Accessories, Home Goods, Stationery, Electronics Accessories) → selects a product type → enters AI design flow → prompts a design, refines it, confirms pricing and variants.
+Merchant installs from Shopify App Store → OAuth handshake → Arcade account auto-provisioned (or linked if email matches) → merchant lands in onboarding welcome screen ("Turn thoughts into things") with value props and a 3-step overview (Browse & Choose → Design with AI → Publish & Sell) → clicks "Get Started" → enters category grid.
 
-### 3. Publish to Store
-Merchant clicks "Publish to Store" → product created in Shopify as **Draft** via GraphQL Admin API → merchant reviews and activates in Shopify Admin.
+**OAuth states:**
+- **No Arcade account:** Auto-provision silently, land in embedded app
+- **Matching email:** Auto-link to existing account
+- **Different email (post-MVP):** Falls back to auto-provision with merge-later note
 
-### 4. Order Fulfillment
-Customer purchases on Shopify storefront → `orders/create` webhook fires → Arcade routes order to manufacturer → manufacturer fulfills and ships → tracking syncs back to Shopify via Fulfillment API → customer receives shipping notification.
+### 2. Browse Categories (Journey C, Steps 1–3)
+
+Merchant sees a **visual grid of product category tiles** (Scarves, Decorative Pillows, Table Linens, etc.) → selects a category → sees available product types within it (e.g., under Decorative Pillows: Square Throw Pillow Cover, Lumbar Pillow Cover, Euro Sham Cover, Outdoor Pillow Cover) with thumbnail, specs, base price, and "Design" CTA.
+
+### 3. Prompt Design (Journey C, Step 4)
+
+Merchant clicks "Design" → enters the **Prompt Design screen**: a text area for describing the desired design, plus structured input chips for Category, Colors, Artist style, and Image upload → submits the prompt.
+
+### 4. AI Design Flow (Journey C, Step 5)
+
+PDP-style layout: AI-generated product imagery with thumbnail variants on the left, product details on the right (name, base product type, price + shipping, original prompt with "Regenerate Design" option). Merchant selects variants via checkboxes:
+- **Sizes** (e.g., 11x11", 16x16", 18x18", 20x20" with "Select all")
+- **Fabrics** (e.g., Cotton Canvas, Linen, Velvet with "Select all")
+
+Manufacturer attribution shown at bottom (e.g., "Made by Esme Textiles"). Merchant can "Edit Design" to iterate or "Save Draft" to come back later.
+
+### 5. Review, Price & Publish (Journey C, Steps 8–11)
+
+Side-by-side view: product preview on left, details on right (Title, Description, Base Price, Your Price, Profit, Sizes, Colors). A **Pricing step** lets the merchant configure a retail markup percentage and edit per-variant retail prices with a table showing Variant, Product Cost, Retail Price, and Estimated Earnings.
+
+Merchant clicks **"Publish to Store"** → product created via Shopify GraphQL Admin API as **Active** (immediately live) → success confirmation with CTAs for "View in Shopify Admin" and "Create Another Product".
+
+### 6. Edit Product (Journey F)
+
+Post-publish editing within the embedded app: title, rich text description (with AI assist), status toggle (Active/Draft), publishing channel display, and sales summary.
+
+### 7. Order Fulfillment (Journey D)
+
+Customer purchases on Shopify storefront → `orders/create` webhook fires → Arcade receives order + charges merchant's Arcade billing method for manufacturing cost → routes to manufacturer → manufacturer fulfills and ships → tracking syncs back to Shopify via Fulfillment API → customer receives branded shipping notification.
+
+### 8. Orders Dashboard (Journey E)
+
+Tabbed interface: **All | Unfulfilled | In Production | Shipped | Delivered** (with badge counts). Filterable by search, status, date, sort. Table columns: Order #, Date, Customer, Product, Payment (Paid/Pending/Refunded), Fulfillment status, Total. Drill-down via row menu for manufacturer details, tracking, ETA. Export and manual "Create order" supported. Paginated.
 
 ## Data Model
 
 | Entity | Purpose |
 |--------|---------|
 | **Shop** | Shopify store connection — domain, access token, linked Arcade account |
-| **ArcadeProduct** | Product designed in Arcade — design data, pricing, variants, Shopify product GID |
-| **ArcadeOrder** | Order from Shopify — manufacturer routing, fulfillment status, tracking |
-| **ProductCategory** | Predefined categories (static for v1) — Apparel, Accessories, etc. |
-| **ProductType** | Product types within categories — base price, variants, manufacturer mapping |
+| **ArcadeProduct** | Product designed in Arcade — design prompt, AI imagery, Shopify product GID, status (draft/active) |
+| **ProductVariant** | Per-variant config — size, fabric, product cost, retail price, markup % |
+| **ArcadeOrder** | Order from Shopify — manufacturer routing, fulfillment status, tracking, payment status |
+| **ProductCategory** | Predefined categories (static for v1) — visual grid tile with image |
+| **ProductType** | Product types within categories — specs, base price, size options, fabric options, manufacturer mapping |
+| **Manufacturer** | Manufacturer in Arcade's network — name, capabilities, fulfillment capacity |
 
-## Product Categories (v1)
+## Product Categories
+
+### v1 — Home Textiles (aligned with current manufacturer capabilities)
+
+Displayed as a flat visual grid of tiles on the home screen:
+
+| Category | Example Product Types |
+|----------|----------------------|
+| Scarves | — |
+| Decorative Pillows | Square Throw Pillow Cover, Lumbar Pillow Cover, Euro Sham Cover, Outdoor Pillow Cover |
+| Table Linens | — |
+| Napkins | — |
+| Placemats | — |
+| Tablecloths | — |
+| Table Runners | — |
+| Duvet Covers | — |
+| Shams | — |
+| Quilts | — |
+| Quilted Shams | — |
+| Curtains | — |
+| Lampshades | — |
+
+Categories are **static at launch** for simplicity and quality control.
+
+### v2 — Expanded Verticals (future)
 
 | Category | Product Types |
 |----------|--------------|
 | Apparel | T-Shirts, Hoodies, Hats, Tank Tops, Jackets |
 | Accessories | Tote Bags, Phone Cases, Jewelry, Watches, Sunglasses |
-| Home Goods | Mugs, Pillows, Candles, Wall Art, Blankets |
+| Home Goods | Mugs, Candles, Wall Art, Blankets |
 | Stationery | Notebooks, Greeting Cards, Stickers, Posters |
 | Electronics Accessories | Laptop Sleeves, Chargers, Cable Organizers |
+
+## Screen Inventory
+
+| Screen | Route | Description |
+|--------|-------|-------------|
+| Onboarding | `app._index` | Welcome: "Turn thoughts into things", value props, 3-step overview, "Get Started" CTA |
+| Category Grid | `app.categories._index` | Visual grid of 13 home textile category tiles |
+| Product Type Selection | `app.categories.$slug` | Product types within category — thumbnail, specs, base price, "Design" CTA |
+| Prompt Design | `app.design.prompt` | Text area + structured chips (Category, Colors, Artist, Image upload) |
+| AI Design (PDP) | `app.design.$id` | AI imagery left, details right, size + fabric checkboxes, manufacturer attribution |
+| Review & Pricing | `app.design.$id.pricing` | Side-by-side preview, markup % control, per-variant pricing table |
+| Publish Confirmation | (modal) | Success state with "View in Shopify Admin" + "Create Another Product" |
+| Edit Product | `app.products.$id` | Title, rich text editor (AI assist), status toggle, publishing, sales |
+| Orders Dashboard | `app.orders` | Tabbed (All/Unfulfilled/In Production/Shipped/Delivered), filterable, exportable |
+| Order Detail | `app.orders.$id` | Manufacturer, ETA, tracking, carrier, status timeline |
 
 ## Project Structure
 
@@ -93,22 +166,34 @@ Customer purchases on Shopify storefront → `orders/create` webhook fires → A
 arcade-shopify-app/
 ├── app/
 │   ├── routes/
-│   │   ├── app._index.tsx          # Home — category browsing grid
-│   │   ├── app.categories.$slug.tsx # Product type selection
-│   │   ├── app.design.$type.tsx     # AI design flow
-│   │   ├── app.orders.tsx           # Orders dashboard
-│   │   ├── app.orders.$id.tsx       # Order detail
-│   │   ├── auth.$.tsx               # OAuth callback
-│   │   └── webhooks.tsx             # Webhook handlers
-│   ├── components/                  # Shared Polaris components
-│   ├── models/                      # Prisma client helpers
-│   └── shopify.server.ts            # Shopify app config
+│   │   ├── app._index.tsx              # Onboarding / home
+│   │   ├── app.categories._index.tsx   # Category browsing grid
+│   │   ├── app.categories.$slug.tsx    # Product type selection
+│   │   ├── app.design.prompt.tsx       # Prompt design screen
+│   │   ├── app.design.$id.tsx          # AI design flow (PDP layout)
+│   │   ├── app.design.$id.pricing.tsx  # Review & pricing config
+│   │   ├── app.products.$id.tsx        # Edit product details
+│   │   ├── app.orders.tsx              # Orders dashboard (tabbed)
+│   │   ├── app.orders.$id.tsx          # Order detail
+│   │   ├── auth.$.tsx                  # OAuth callback
+│   │   └── webhooks.tsx                # Webhook handlers
+│   ├── components/
+│   │   ├── CategoryGrid.tsx            # Visual grid of category tiles
+│   │   ├── ProductTypeCard.tsx         # Product type row with specs
+│   │   ├── PromptInput.tsx             # Design prompt + structured chips
+│   │   ├── DesignPreview.tsx           # AI-generated imagery display
+│   │   ├── VariantSelector.tsx         # Size + fabric checkboxes
+│   │   ├── PricingTable.tsx            # Per-variant pricing editor
+│   │   ├── OrdersTable.tsx             # Tabbed orders with filters
+│   │   └── RichTextEditor.tsx          # Product description editor
+│   ├── models/                         # Prisma client helpers
+│   └── shopify.server.ts              # Shopify app config
 ├── prisma/
-│   ├── schema.prisma                # Database schema
-│   ├── migrations/                  # Prisma migrations
-│   └── seed.ts                      # Category + product type seed data
-├── public/                          # Static assets
-├── shopify.app.toml                 # Shopify app configuration
+│   ├── schema.prisma                   # Database schema
+│   ├── migrations/                     # Prisma migrations
+│   └── seed.ts                         # Category + product type seed data
+├── public/                             # Static assets (category images)
+├── shopify.app.toml                    # Shopify app configuration
 ├── package.json
 ├── tsconfig.json
 └── remix.config.js
@@ -137,7 +222,7 @@ cp .env.example .env
 # Run database migrations
 npx prisma migrate dev
 
-# Seed product categories
+# Seed product categories (13 home textile categories)
 npx prisma db seed
 
 # Start development server (opens embedded app in Shopify Admin)
@@ -160,25 +245,25 @@ shopify app dev
 
 | Milestone | Target | Focus |
 |-----------|--------|-------|
-| **M1: Foundation** | Apr 1 | Scaffold, DB, OAuth, GDPR webhooks, designs, category data |
-| **M2: Core Flows** | Apr 9 | Category UI, AI design flow, product push to Shopify |
-| **M3: Order Pipeline** | Apr 15 | Order webhooks, manufacturer routing, fulfillment tracking |
-| **M4: Testing & Polish** | Apr 21 | E2E testing, performance, App Bridge compliance, analytics |
-| **M5: Beta & Submit** | Apr 25 | Beta with existing users, bug fixes, App Store submission |
+| **M1: Foundation** | Week 1 | Scaffold, DB, OAuth, GDPR webhooks, designs, category seed data |
+| **M2: Core Flows** | Week 2 | Onboarding, category grid, prompt design, AI design PDP, variant selection, pricing config, publish to Shopify |
+| **M3: Order Pipeline** | Week 2–3 | Order webhooks, manufacturer routing, fulfillment tracking, orders dashboard |
+| **M4: Testing & Polish** | Week 3 | E2E testing, embedded performance, App Bridge compliance, analytics, edit product flow |
+| **M5: Beta & Submit** | Week 3+ | Beta with existing users, bug fixes, App Store submission |
 
 ## Shopify App Store Requirements
 
 All of these must be met for App Store approval:
 
-- [x] GraphQL Admin API only (no REST)
-- [x] App Bridge for all embedded navigation
-- [x] Session token auth (no cookies)
-- [x] Polaris design system for all UI
-- [x] GDPR webhooks: `customers/data_request`, `customers/redact`, `shop/redact`
-- [x] `app/uninstalled` webhook handler
-- [x] All scopes justified
-- [x] Privacy policy URL
-- [x] No external redirects during core flows
+- [ ] GraphQL Admin API only (no REST)
+- [ ] App Bridge for all embedded navigation
+- [ ] Session token auth (no cookies)
+- [ ] Polaris design system for all UI
+- [ ] GDPR webhooks: `customers/data_request`, `customers/redact`, `shop/redact`
+- [ ] `app/uninstalled` webhook handler
+- [ ] All scopes justified
+- [ ] Privacy policy URL
+- [ ] No external redirects during core flows
 
 ## MVP Scope Cuts
 
@@ -186,11 +271,20 @@ The following are explicitly deferred for v1:
 
 - Account linking for different-email OAuth (Journey B State 3)
 - Native Shopify orders page integration (Journey E Phase 2)
-- Dynamic categories based on manufacturer availability
+- Dynamic categories reflecting manufacturer availability
+- v2 category expansion (Apparel, Accessories, Stationery, Electronics)
 - Shopify Billing API integration
 - Multi-store management UI
-- Product update sync after push
+- Product update sync after design changes
 - Pricing sync on manufacturer cost changes
+
+## Permissions & User Types
+
+| Role | Access |
+|------|--------|
+| Store owner / admin | Full: connect store, browse, design, push products, view orders |
+| Staff (product perms) | Browse, design, push products — cannot manage store connection |
+| Anonymous | No access — OAuth required |
 
 ## Links
 
@@ -203,8 +297,8 @@ The following are explicitly deferred for v1:
 
 | Role | Owner |
 |------|-------|
-| Product | Michael |
-| Product | Vivian |
+| Product | Michael, Vivian |
 | Frontend | TBD |
 | Backend | TBD |
 | AI | TBD |
+| Design | TBD |
