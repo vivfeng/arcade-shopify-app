@@ -12,26 +12,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const customerEmail = (payload as { customer?: { email?: string } })?.customer
     ?.email;
 
-  if (customerEmail) {
-    const orders = await db.arcadeOrder.findMany({
-      where: {
-        customerEmail,
-        shop: { domain: shop },
-      },
-      select: {
-        shopifyOrderId: true,
-        shopifyOrderNumber: true,
-        customerName: true,
-        customerEmail: true,
-        totalPrice: true,
-        createdAt: true,
-      },
+  if (!customerEmail) {
+    console.log(`No customer email in ${topic} payload for ${shop}`);
+    return new Response(JSON.stringify({ customer: {}, orders: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
     });
-
-    console.log(
-      `Found ${orders.length} orders for customer ${customerEmail} in shop ${shop}`,
-    );
   }
 
-  return new Response();
+  const orders = await db.arcadeOrder.findMany({
+    where: {
+      customerEmail,
+      shop: { domain: shop },
+    },
+    select: {
+      shopifyOrderId: true,
+      shopifyOrderNumber: true,
+      customerName: true,
+      customerEmail: true,
+      totalPrice: true,
+      createdAt: true,
+    },
+  });
+
+  console.log(
+    `Found ${orders.length} orders for customer ${customerEmail} in shop ${shop}`,
+  );
+
+  return new Response(
+    JSON.stringify({ customer: { email: customerEmail }, orders }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 };
