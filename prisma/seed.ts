@@ -36,6 +36,7 @@ async function main() {
     name: string;
     slug: string;
     sortOrder: number;
+    imageUrl: string;
     productTypes: Array<{
       name: string;
       slug: string;
@@ -49,6 +50,7 @@ async function main() {
       name: "Scarves",
       slug: "scarves",
       sortOrder: 1,
+      imageUrl: "https://www.datocms-assets.com/134217/1760377755-scarfladyproduct.jpg",
       productTypes: [
         {
           name: "Silk Scarf",
@@ -72,6 +74,7 @@ async function main() {
       name: "Decorative Pillows",
       slug: "decorative-pillows",
       sortOrder: 2,
+      imageUrl: "https://www.datocms-assets.com/134217/1760394017-pillowcropped.jpeg",
       productTypes: [
         {
           name: "Square Throw Pillow Cover",
@@ -111,6 +114,7 @@ async function main() {
       name: "Table Linens",
       slug: "table-linens",
       sortOrder: 3,
+      imageUrl: "https://www.datocms-assets.com/134217/1760393303-napkinclose.jpg",
       productTypes: [
         {
           name: "Linen Table Set",
@@ -126,6 +130,7 @@ async function main() {
       name: "Napkins",
       slug: "napkins",
       sortOrder: 4,
+      imageUrl: "https://www.datocms-assets.com/134217/1760381488-napkinclose.jpg",
       productTypes: [
         {
           name: "Cloth Dinner Napkin",
@@ -149,6 +154,7 @@ async function main() {
       name: "Placemats",
       slug: "placemats",
       sortOrder: 5,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376408-placematcropped.jpg",
       productTypes: [
         {
           name: "Woven Placemat",
@@ -164,6 +170,7 @@ async function main() {
       name: "Tablecloths",
       slug: "tablecloths",
       sortOrder: 6,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376407-tablecoth.jpg",
       productTypes: [
         {
           name: "Rectangular Tablecloth",
@@ -187,6 +194,7 @@ async function main() {
       name: "Table Runners",
       slug: "table-runners",
       sortOrder: 7,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376408-tablerunner.jpg",
       productTypes: [
         {
           name: "Table Runner",
@@ -202,6 +210,7 @@ async function main() {
       name: "Duvet Covers",
       slug: "duvet-covers",
       sortOrder: 8,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376922-duvet.jpg",
       productTypes: [
         {
           name: "Duvet Cover Set",
@@ -222,6 +231,7 @@ async function main() {
       name: "Shams",
       slug: "shams",
       sortOrder: 9,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376922-shams.jpg",
       productTypes: [
         {
           name: "Pillow Sham",
@@ -237,6 +247,7 @@ async function main() {
       name: "Quilts",
       slug: "quilts",
       sortOrder: 10,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376922-quilt.jpg",
       productTypes: [
         {
           name: "Coverlet Quilt",
@@ -255,6 +266,7 @@ async function main() {
       name: "Quilted Shams",
       slug: "quilted-shams",
       sortOrder: 11,
+      imageUrl: "https://www.datocms-assets.com/134217/1760376922-quilt-shams.jpg",
       productTypes: [
         {
           name: "Quilted Pillow Sham",
@@ -270,6 +282,7 @@ async function main() {
       name: "Curtains",
       slug: "curtains",
       sortOrder: 12,
+      imageUrl: "https://www.datocms-assets.com/134217/1760377023-curtainseditorial.jpg",
       productTypes: [
         {
           name: "Curtain Panel",
@@ -290,6 +303,7 @@ async function main() {
       name: "Lampshades",
       slug: "lampshades",
       sortOrder: 13,
+      imageUrl: "https://www.datocms-assets.com/134217/1760377721-floorlamp.jpg",
       productTypes: [
         {
           name: "Drum Lampshade",
@@ -317,12 +331,13 @@ async function main() {
       update: {
         name: cat.name,
         sortOrder: cat.sortOrder,
+        imageUrl: cat.imageUrl,
       },
       create: {
         name: cat.name,
         slug: cat.slug,
         sortOrder: cat.sortOrder,
-        imageUrl: `/images/categories/${cat.slug}.jpg`,
+        imageUrl: cat.imageUrl,
       },
     });
 
