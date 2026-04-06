@@ -1,6 +1,8 @@
 # Shopify app configuration
 # client_id will be set after `shopify app config link`
 
+embedded = true
+
 [access_scopes]
 scopes = "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments"
 
