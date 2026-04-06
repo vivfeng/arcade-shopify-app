@@ -39,6 +39,7 @@ model Shop {
   email           String?
   name            String?
   installedAt     DateTime        @default(now())
+  onboardingComplete Boolean     @default(false)
   uninstalledAt   DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt

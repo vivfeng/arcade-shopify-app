@@ -25,19 +25,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     select: { onboardingComplete: true },
   });
 
-  const categories = await db.productCategory.findMany({
-    orderBy: { sortOrder: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      imageUrl: true,
-    },
-  });
-
   return json({
     onboardingComplete: shop?.onboardingComplete ?? false,
-    categories,
   });
 };
 
@@ -49,7 +38,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     data: { onboardingComplete: true },
   });
 
-  return redirect("/app");
+  return redirect("/app/categories");
 };
 
 const STEPS = [
@@ -80,7 +69,10 @@ const VALUE_PROPS = [
   "No Upfront Cost",
 ];
 
-function WelcomeScreen() {
+export default function Home() {
+  const { onboardingComplete } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+
   return (
     <Page>
       <div
@@ -129,18 +121,24 @@ function WelcomeScreen() {
             ))}
           </div>
 
-          {/* CTAs */}
+          {/* CTA */}
           <BlockStack gap="200">
-            <Form method="post">
-              <Button variant="primary" size="large" submit>
-                Get Started
+            {!onboardingComplete ? (
+              <Form method="post">
+                <Button variant="primary" size="large" submit>
+                  Get Started
+                </Button>
+              </Form>
+            ) : (
+              <Button
+                variant="primary"
+                size="large"
+                onClick={() => navigate("/app/categories")}
+              >
+                Browse Categories
               </Button>
-            </Form>
-            <Button
-              variant="plain"
-              url="https://arcade.ai"
-              external
-            >
+            )}
+            <Button variant="plain" url="https://arcade.ai" external>
               Learn more about Arcade
             </Button>
           </BlockStack>
@@ -174,7 +172,12 @@ function WelcomeScreen() {
                     <Text as="h3" variant="headingSm" alignment="center">
                       {step.title}
                     </Text>
-                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                    <Text
+                      as="p"
+                      variant="bodySm"
+                      tone="subdued"
+                      alignment="center"
+                    >
                       {step.description}
                     </Text>
                   </BlockStack>
@@ -186,128 +189,4 @@ function WelcomeScreen() {
       </div>
     </Page>
   );
-}
-
-const gridStyles: Record<string, React.CSSProperties> = {
-  page: {
-    background: "#f7f4f0",
-    minHeight: "100vh",
-    padding: "28px 32px 48px",
-  },
-  title: {
-    fontFamily: "'Instrument Sans', sans-serif",
-    fontWeight: 600,
-    fontSize: 22,
-    color: "#0f0f0f",
-    margin: 0,
-    lineHeight: "normal",
-  },
-  subtitle: {
-    fontFamily: "'Instrument Sans', sans-serif",
-    fontWeight: 400,
-    fontSize: 13,
-    color: "#696864",
-    margin: "6px 0 0",
-    lineHeight: "normal",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: 16,
-    marginTop: 20,
-  },
-  card: {
-    all: "unset" as const,
-    cursor: "pointer",
-    display: "flex",
-    flexDirection: "column" as const,
-    background: "#ffffff",
-    border: "1px solid #e1dfdb",
-    borderRadius: 8,
-    overflow: "hidden",
-    transition: "border-color 150ms ease",
-    boxSizing: "border-box" as const,
-  },
-  imageArea: {
-    width: "100%",
-    aspectRatio: "242 / 138",
-    overflow: "hidden",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover" as const,
-    display: "block",
-  },
-  imagePlaceholder: {
-    width: "100%",
-    height: "100%",
-    background: "#e9e5d8",
-  },
-  label: {
-    padding: "10px 12px",
-  },
-  labelText: {
-    fontFamily: "'Instrument Sans', sans-serif",
-    fontWeight: 500,
-    fontSize: 13,
-    color: "#0f0f0f",
-    lineHeight: "normal",
-  },
-};
-
-function CategoryGrid() {
-  const { categories } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
-
-  return (
-    <div style={gridStyles.page}>
-      <h1 style={gridStyles.title}>Arcade</h1>
-      <p style={gridStyles.subtitle}>
-        Design custom products with AI — browse categories to get started
-      </p>
-
-      <div style={gridStyles.grid}>
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            type="button"
-            onClick={() => navigate(`/app/categories/${cat.slug}`)}
-            style={gridStyles.card}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#c5c2bc";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "#e1dfdb";
-            }}
-          >
-            <div style={gridStyles.imageArea}>
-              {cat.imageUrl ? (
-                <img
-                  src={cat.imageUrl}
-                  alt={cat.name}
-                  style={gridStyles.image}
-                />
-              ) : (
-                <div style={gridStyles.imagePlaceholder} />
-              )}
-            </div>
-            <div style={gridStyles.label}>
-              <span style={gridStyles.labelText}>{cat.name}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function Index() {
-  const { onboardingComplete } = useLoaderData<typeof loader>();
-
-  if (!onboardingComplete) {
-    return <WelcomeScreen />;
-  }
-
-  return <CategoryGrid />;
 }
