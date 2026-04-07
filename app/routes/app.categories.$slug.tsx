@@ -213,7 +213,7 @@ export default function CategoryProductTypes() {
               </span>
               <button
                 type="button"
-                onClick={() => navigate(`/app/design/${pt.slug}`)}
+                onClick={() => navigate(`/app/design/prompt?type=${pt.slug}`)}
                 style={{
                   height: 30,
                   padding: "0 12px",
