@@ -7,3 +7,5 @@ build
 prisma/dev.sqlite
 .DS_Store
 dist
+.vercel
+.env*.local
