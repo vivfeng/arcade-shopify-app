@@ -47,8 +47,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Prompt and product type are required" }, { status: 400 });
   }
 
-  // TODO: Call Arcade AI design API when AII-826 is implemented
-  // For now, create a draft product with the prompt
+  // TODO(AII-826): Call Arcade AI design API.
+  // The implementation must target React Router, not Remix — see
+  // `docs/adr/0001-remix-to-react-router.md`. Do not introduce new
+  // `@remix-run/*` imports in the ticket that picks this up.
+  // For now, create a draft product with the prompt.
   const shop = await db.shop.findFirst({
     where: { domain: { not: "" } },
     select: { id: true },
