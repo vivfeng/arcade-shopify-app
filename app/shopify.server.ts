@@ -7,6 +7,12 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import { ApiVersion } from "@shopify/shopify-api";
 import db from "./db.server";
 
+// The apiVersion pin below MUST match `shopify.app.toml` and
+// `shopify.app.arcadeai.toml`. Runtime Admin API calls use this enum;
+// the toml files configure webhook topic subscriptions. If the two
+// drift, webhook payload shapes and GraphQL typegen disagree at
+// runtime. Bumps touch all three files in a single commit. See
+// ADR 0001 blocker B4 in `docs/adr/0001-remix-to-react-router.md`.
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",

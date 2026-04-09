@@ -1,4 +1,12 @@
-# Shopify app configuration
+# Shopify app configuration — DEVELOPMENT default.
+#
+# The production config lives in `shopify.app.arcadeai.toml` and is
+# selected via `shopify app config use arcadeai`. The api_version below
+# MUST match the runtime pin in `app/shopify.server.ts` and the prod
+# config in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4 in
+# `docs/adr/0001-remix-to-react-router.md` — version bumps touch all
+# three files in a single commit.
+#
 # client_id will be set after `shopify app config link`
 
 [access_scopes]
