@@ -12,7 +12,7 @@ Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | [Shopify Remix](https://shopify.dev/docs/apps/build/scaffold) (official Shopify app template) |
+| Framework | [React Router v7](https://reactrouter.com/) via [`@shopify/shopify-app-react-router`](https://www.npmjs.com/package/@shopify/shopify-app-react-router) — **target stack for all new work**. The current tree is still on the legacy `@shopify/shopify-app-remix` scaffold; see [ADR 0001](docs/adr/0001-remix-to-react-router.md) for the migration plan. |
 | UI | [Polaris](https://polaris.shopify.com/) (Shopify's design system) |
 | Embedded UI | [App Bridge 4](https://shopify.dev/docs/api/app-bridge) |
 | Database | PostgreSQL + [Prisma](https://www.prisma.io/) |
@@ -20,13 +20,39 @@ Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com
 | API | Shopify GraphQL Admin API |
 | Hosting | Vercel |
 
+## Ticket requirements (read before opening or picking up work)
+
+Per [ADR 0001](docs/adr/0001-remix-to-react-router.md), this repo is
+migrating off Remix. The migration runs as M0 and is a hard prerequisite
+for any new M2+ feature work. While M0 is in flight:
+
+- **New tickets must be scoped against React Router**, not Remix. Write
+  acceptance criteria, snippets, and file paths as they will exist in
+  the rescaffolded repo. A ticket that says "add a Remix loader for X"
+  should be rewritten before it gets picked up.
+- **No new `@remix-run/*` or `@shopify/shopify-app-remix` imports** in
+  code changes. New files are written against React Router v7 /
+  `@shopify/shopify-app-react-router` from day one. If you are editing
+  an existing Remix file, match the local style but do not *spread*
+  Remix imports to new files.
+- **Bug fixes against existing Remix files are still allowed** — we
+  cannot ship broken code while waiting on M0 — but must stay minimal.
+  Anything larger than an import-swap or a surgical correction gets
+  rolled into the rescaffold instead.
+- **Every new loader/action must scope its DB writes by
+  `session.shop`**, never by `db.shop.findFirst()`. This is blocker B3
+  in the ADR and applies to both Remix and React Router files.
+
+If a ticket's scope does not fit inside these rules, escalate at triage
+rather than working around them.
+
 ## Architecture
 
 ```
 ┌───────────────────────────────────────────────────────┐
 │                 SHOPIFY ADMIN (iframe)                 │
 │  ┌─────────────────────────────────────────────────┐  │
-│  │      Arcade Embedded App (Remix + Polaris)      │  │
+│  │   Arcade Embedded App (React Router + Polaris)  │  │
 │  │                                                  │  │
 │  │  Onboarding → Category Grid → Product Type      │  │
 │  │  → Prompt Design → AI Design (PDP)              │  │
@@ -193,10 +219,13 @@ arcade-shopify-app/
 │   ├── migrations/                     # Prisma migrations
 │   └── seed.ts                         # Category + product type seed data
 ├── public/                             # Static assets (category images)
-├── shopify.app.toml                    # Shopify app configuration
+├── docs/
+│   └── adr/                            # Architecture decision records
+├── shopify.app.toml                    # Shopify app configuration (dev)
+├── shopify.app.arcadeai.toml           # Shopify app configuration (prod)
+├── vite.config.ts
 ├── package.json
-├── tsconfig.json
-└── remix.config.js
+└── tsconfig.json
 ```
 
 ## Development
@@ -243,13 +272,14 @@ shopify app dev
 
 ## Milestones
 
-| Milestone | Target | Focus |
-|-----------|--------|-------|
-| **M1: Foundation** | Week 1 | Scaffold, DB, OAuth, GDPR webhooks, designs, category seed data |
-| **M2: Core Flows** | Week 2 | Onboarding, category grid, prompt design, AI design PDP, variant selection, pricing config, publish to Shopify |
-| **M3: Order Pipeline** | Week 2–3 | Order webhooks, manufacturer routing, fulfillment tracking, orders dashboard |
-| **M4: Testing & Polish** | Week 3 | E2E testing, embedded performance, App Bridge compliance, analytics, edit product flow |
-| **M5: Beta & Submit** | Week 3+ | Beta with existing users, bug fixes, App Store submission |
+| Milestone | Focus |
+|-----------|-------|
+| **M0: React Router rescaffold** | Rescaffold the app against `@shopify/shopify-app-react-router`, port loaders/actions/webhooks/Prisma, clear `npm audit` findings, lock in the pre-migration blockers (B1–B4 in [ADR 0001](docs/adr/0001-remix-to-react-router.md)). Must land before M2 tickets begin. |
+| **M1: Foundation** | Scaffold, DB, OAuth, GDPR webhooks, designs, category seed data. |
+| **M2: Core Flows** | Onboarding, category grid, prompt design, AI design PDP, variant selection, pricing config, publish to Shopify. *All M2 work is written against React Router, not Remix.* |
+| **M3: Order Pipeline** | Order webhooks, manufacturer routing, fulfillment tracking, orders dashboard. |
+| **M4: Testing & Polish** | E2E testing, embedded performance, App Bridge compliance, analytics, edit product flow. |
+| **M5: Beta & Submit** | Beta with existing users, bug fixes, App Store submission. |
 
 ## Shopify App Store Requirements
 

@@ -35,29 +35,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const prompt = formData.get("prompt") as string;
   const productTypeId = formData.get("productTypeId") as string;
-  const colors = formData.get("colors") as string;
-  const artist = formData.get("artist") as string;
 
   if (!prompt || !productTypeId) {
     return json({ error: "Prompt and product type are required" }, { status: 400 });
   }
 
-  // TODO: Call Arcade AI design API when AII-826 is implemented
-  // For now, create a draft product with the prompt
-  const shop = await db.shop.findFirst({
-    where: { domain: { not: "" } },
+  // Scope the shop lookup to the authenticated session. Using findFirst
+  // here (the previous behavior) would attach new products to whichever
+  // Shop row happened to sort first in a multi-store install — see
+  // ADR 0001 blocker B3 and the "Ticket requirements" rule in README.md.
+  const shop = await db.shop.findUnique({
+    where: { domain: session.shop },
     select: { id: true },
   });
 
   if (!shop) {
-    return json({ error: "Shop not found" }, { status: 400 });
+    return json({ error: "Shop not found for authenticated session" }, { status: 400 });
   }
 
+  // TODO(AII-826): Call Arcade AI design API.
+  // The implementation must target React Router, not Remix — see
+  // `docs/adr/0001-remix-to-react-router.md`. Do not introduce new
+  // `@remix-run/*` imports in the ticket that picks this up.
+  // For now, create a draft product scoped to the authenticated shop.
   const product = await db.arcadeProduct.create({
     data: {
       designPrompt: prompt,
@@ -213,6 +218,83 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: "#0f0f0f",
   },
+  // Draft-saved confirmation card. The full AI design + pricing screens
+  // are not shipped yet (tracked in ADR 0001 M0), so on success we stay
+  // on this page and surface a confirmation instead of navigating to a
+  // route that does not exist.
+  successCard: {
+    background: "#ffffff",
+    border: "1px solid #deddd5",
+    borderRadius: 12,
+    boxShadow: "0px 1px 4px 0px rgba(0,0,0,0.06)",
+    padding: 24,
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "flex-start" as const,
+    gap: 14,
+  },
+  successBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    background: "#e8f8ed",
+    color: "#2ca84f",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 22,
+    fontWeight: 600,
+  },
+  successHeading: {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 600,
+    color: "#0f0f0f",
+    fontFamily: "'Instrument Sans', sans-serif",
+  },
+  successSubtext: {
+    margin: "4px 0 0",
+    fontSize: 13,
+    lineHeight: "20px",
+    color: "#696864",
+    fontFamily: "'Instrument Sans', sans-serif",
+  },
+  successActions: {
+    display: "flex",
+    gap: 8,
+    marginTop: 4,
+  },
+  successPrimary: {
+    height: 40,
+    padding: "0 16px",
+    background: "#0f0f0f",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    fontFamily: "'Instrument Sans', sans-serif",
+    cursor: "pointer",
+  },
+  successSecondary: {
+    height: 40,
+    padding: "0 16px",
+    background: "#ffffff",
+    color: "#45413b",
+    border: "1px solid #deddd5",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    fontFamily: "'Instrument Sans', sans-serif",
+    cursor: "pointer",
+  },
+  successDraftId: {
+    margin: 0,
+    fontSize: 10,
+    color: "#988c52",
+    fontFamily: "'DM Mono', monospace",
+    letterSpacing: "0.3px",
+  },
 };
 
 // ─── Chip with dropdown ───
@@ -336,10 +418,15 @@ export default function PromptDesign() {
     );
   }, [canGenerate, prompt, selectedColors, selectedArtist, productType.id, fetcher]);
 
-  // Navigate on successful generation
-  if (fetcher.data?.productId) {
-    navigate(`/app/design/${fetcher.data.productId}`);
-  }
+  // The full AI design + pricing flow is not shipped yet (tracked in
+  // ADR 0001 M0). On success, stay on this page and surface a draft
+  // confirmation instead of navigating to `/app/design/:id`, which
+  // does not exist as a route yet. See review finding #3 and
+  // docs/tickets/artsem-review-epic.md subticket fix 2.
+  const savedProductId =
+    fetcher.data && "productId" in fetcher.data
+      ? fetcher.data.productId
+      : null;
 
   return (
     <Page>
@@ -359,12 +446,50 @@ export default function PromptDesign() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <h1 style={s.heading}>Prompt Design</h1>
           <p style={s.subtitle}>
-            Describe your design and let AI create it for you
+            {savedProductId
+              ? "Your draft prompt has been saved."
+              : "Describe your design and let AI create it for you"}
           </p>
         </div>
 
-        {/* Prompt card */}
-        <div style={s.card}>
+        {savedProductId ? (
+          /* Draft saved — in-place confirmation */
+          <div style={s.successCard}>
+            <div style={s.successBadge} aria-hidden="true">
+              ✓
+            </div>
+            <div>
+              <h2 style={s.successHeading}>Draft saved</h2>
+              <p style={s.successSubtext}>
+                We've stored your prompt for this{" "}
+                {productType.name.toLowerCase()}. The AI design studio
+                and pricing flow are coming soon — you'll be notified
+                when they're ready.
+              </p>
+            </div>
+            <div style={s.successActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(`/app/categories/${productType.category.slug}`)
+                }
+                style={s.successPrimary}
+              >
+                Create another draft
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/app/categories")}
+                style={s.successSecondary}
+              >
+                Browse categories
+              </button>
+            </div>
+            <p style={s.successDraftId}>Draft id: {savedProductId}</p>
+          </div>
+        ) : (
+          /* Prompt card */
+          <div style={s.card}>
           {/* Text area */}
           <textarea
             style={s.textarea}
@@ -428,22 +553,23 @@ export default function PromptDesign() {
             </label>
           </div>
 
-          {/* Generate button */}
-          <div style={s.footer}>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              style={{
-                ...s.generateButton,
-                ...(!canGenerate ? s.generateButtonDisabled : {}),
-              }}
-            >
-              <span style={{ fontSize: 16 }}>✦</span>
-              {isSubmitting ? "Generating..." : "Generate"}
-            </button>
+            {/* Generate button */}
+            <div style={s.footer}>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                style={{
+                  ...s.generateButton,
+                  ...(!canGenerate ? s.generateButtonDisabled : {}),
+                }}
+              >
+                <span style={{ fontSize: 16 }}>✦</span>
+                {isSubmitting ? "Generating..." : "Generate"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Page>
   );
