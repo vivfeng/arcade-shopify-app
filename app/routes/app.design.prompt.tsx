@@ -35,32 +35,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const prompt = formData.get("prompt") as string;
   const productTypeId = formData.get("productTypeId") as string;
-  const colors = formData.get("colors") as string;
-  const artist = formData.get("artist") as string;
 
   if (!prompt || !productTypeId) {
     return json({ error: "Prompt and product type are required" }, { status: 400 });
+  }
+
+  // Scope the shop lookup to the authenticated session. Using findFirst
+  // here (the previous behavior) would attach new products to whichever
+  // Shop row happened to sort first in a multi-store install — see
+  // ADR 0001 blocker B3 and the "Ticket requirements" rule in README.md.
+  const shop = await db.shop.findUnique({
+    where: { domain: session.shop },
+    select: { id: true },
+  });
+
+  if (!shop) {
+    return json({ error: "Shop not found for authenticated session" }, { status: 400 });
   }
 
   // TODO(AII-826): Call Arcade AI design API.
   // The implementation must target React Router, not Remix — see
   // `docs/adr/0001-remix-to-react-router.md`. Do not introduce new
   // `@remix-run/*` imports in the ticket that picks this up.
-  // For now, create a draft product with the prompt.
-  const shop = await db.shop.findFirst({
-    where: { domain: { not: "" } },
-    select: { id: true },
-  });
-
-  if (!shop) {
-    return json({ error: "Shop not found" }, { status: 400 });
-  }
-
+  // For now, create a draft product scoped to the authenticated shop.
   const product = await db.arcadeProduct.create({
     data: {
       designPrompt: prompt,
