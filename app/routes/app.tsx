@@ -1,6 +1,6 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import { Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -36,19 +36,12 @@ export default function App() {
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      {/*
-        NavMenu must use the framework's client-side <Link>, not raw <a>
-        tags. Inside the Shopify admin iframe, anchor navigation drops the
-        session token on the URL and causes a full-page reload of the host
-        frame — the embedded app then loses its session and re-auths.
-        See the Shopify React Router template for the same pattern.
-      */}
       <NavMenu>
-        <Link to="/app" rel="home">
+        <a href="/app" rel="home">
           Home
-        </Link>
-        <Link to="/app/categories">Create Product</Link>
-        <Link to="/app/orders">Orders</Link>
+        </a>
+        <a href="/app/categories">Create Product</a>
+        <a href="/app/orders">Orders</a>
       </NavMenu>
       <Outlet />
     </AppProvider>
