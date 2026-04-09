@@ -2,7 +2,29 @@
 
 ## Status
 
-Accepted. Migration to be executed before we add significant new surface area.
+Accepted and in force.
+
+**Policy for all new work from 2026-04-09 onward:**
+
+1. **No new Remix imports.** No new code may introduce imports from
+   `@remix-run/*` or `@shopify/shopify-app-remix`. Every new loader,
+   action, component, hook, or route is written against React Router
+   v7 / `@shopify/shopify-app-react-router` conventions. If the file
+   you are touching is not yet migrated, match the local style, but
+   do not *spread* Remix imports to new files.
+2. **New tickets are scoped against React Router.** When a ticket is
+   written against this repo, the acceptance criteria and code snippets
+   must reference React Router — not Remix — even while the rescaffold
+   is still in flight. A ticket that says "add a Remix loader for X"
+   should be rejected at triage and rewritten.
+3. **Bug fixes on existing Remix files** are allowed (we cannot
+   indefinitely ship broken code while waiting for the port), but the
+   fix must be minimal — import-swap or new imports only if absolutely
+   required. Anything larger gets rolled into the rescaffold instead.
+4. **The rescaffold is the migration vehicle.** There is no in-place
+   upgrade. See "Decision" and "Migration checklist" below.
+
+Migration to be executed before we add significant new surface area.
 
 ## Context
 
