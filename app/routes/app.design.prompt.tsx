@@ -3,6 +3,7 @@ import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { colors, fonts, radius, shadows } from "../lib/tokens";
 import { useState, useCallback } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -84,30 +85,30 @@ const s: Record<string, React.CSSProperties> = {
     border: "none",
     padding: 0,
     cursor: "pointer",
-    color: "#988c52",
+    color: colors.gold,
     fontSize: 14,
     fontWeight: 500,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
   },
   heading: {
     margin: 0,
     fontSize: 26,
     fontWeight: 700,
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     letterSpacing: "-0.52px",
     lineHeight: "28.6px",
   },
   subtitle: {
     margin: 0,
     fontSize: 14,
-    color: "#696864",
-    fontFamily: "'Instrument Sans', sans-serif",
+    color: colors.textSubdued,
+    fontFamily: fonts.sans,
   },
   card: {
-    background: "#ffffff",
-    border: "1px solid #deddd5",
-    borderRadius: 12,
-    boxShadow: "0px 1px 4px 0px rgba(0,0,0,0.06)",
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.lg,
+    boxShadow: shadows.card,
     padding: 20,
     display: "flex",
     flexDirection: "column",
@@ -119,10 +120,10 @@ const s: Record<string, React.CSSProperties> = {
     border: "none",
     outline: "none",
     resize: "vertical",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 15,
     lineHeight: "22px",
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     background: "transparent",
     padding: 0,
   },
@@ -137,20 +138,20 @@ const s: Record<string, React.CSSProperties> = {
     gap: 6,
     height: 32,
     padding: "0 12px",
-    borderRadius: 16,
-    border: "1px solid #deddd5",
-    background: "#ffffff",
+    borderRadius: radius.pill,
+    border: `1px solid ${colors.cardBorder}`,
+    background: colors.cardBg,
     cursor: "pointer",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     fontWeight: 500,
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     transition: "border-color 150ms ease, background 150ms ease",
   },
   chipActive: {
-    background: "#f3eec5",
-    borderColor: "#d4ce9e",
-    color: "#6b6339",
+    background: colors.goldPale,
+    borderColor: colors.goldBorder,
+    color: colors.goldDark,
   },
   chipIcon: {
     fontSize: 14,
@@ -168,13 +169,13 @@ const s: Record<string, React.CSSProperties> = {
     gap: 8,
     height: 40,
     padding: "0 20px",
-    borderRadius: 8,
+    borderRadius: radius.md,
     border: "none",
-    background: "#0f0f0f",
-    color: "#ffffff",
+    background: colors.textPrimary,
+    color: colors.cardBg,
     fontSize: 14,
     fontWeight: 600,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     cursor: "pointer",
   },
   generateButtonDisabled: {
@@ -184,7 +185,7 @@ const s: Record<string, React.CSSProperties> = {
   divider: {
     width: "100%",
     height: 1,
-    background: "#e9e5d8",
+    background: colors.surfaceMuted,
     border: "none",
     margin: 0,
   },
@@ -193,10 +194,10 @@ const s: Record<string, React.CSSProperties> = {
     position: "absolute",
     top: "calc(100% + 4px)",
     left: 0,
-    background: "#ffffff",
-    border: "1px solid #deddd5",
-    borderRadius: 8,
-    boxShadow: "0px 4px 12px rgba(0,0,0,0.1)",
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.md,
+    boxShadow: shadows.dropdown,
     padding: "6px 0",
     zIndex: 10,
     minWidth: 180,
@@ -209,9 +210,9 @@ const s: Record<string, React.CSSProperties> = {
     background: "transparent",
     textAlign: "left" as const,
     cursor: "pointer",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
-    color: "#0f0f0f",
+    color: colors.textPrimary,
   },
 };
 
@@ -254,18 +255,18 @@ function ChipDropdown({
               style={{
                 ...s.dropdownItem,
                 fontWeight: opt === value ? 600 : 400,
-                background: opt === value ? "#f7f4f0" : "transparent",
+                background: opt === value ? colors.pageBg : "transparent",
               }}
               onClick={() => {
                 onSelect(opt);
                 setOpen(false);
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#f7f4f0";
+                e.currentTarget.style.background = colors.pageBg;
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background =
-                  opt === value ? "#f7f4f0" : "transparent";
+                  opt === value ? colors.pageBg : "transparent";
               }}
             >
               {opt}

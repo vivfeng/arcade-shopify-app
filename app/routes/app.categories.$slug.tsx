@@ -3,6 +3,8 @@ import { useLoaderData, useNavigate } from "@remix-run/react";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { formatPrice } from "../lib/format";
+import { colors, fonts, radius, shadows } from "../lib/tokens";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -57,10 +59,10 @@ export default function CategoryProductTypes() {
             border: "none",
             padding: 0,
             cursor: "pointer",
-            color: "#988c52",
+            color: colors.gold,
             fontSize: 14,
             fontWeight: 500,
-            fontFamily: "'Instrument Sans', sans-serif",
+            fontFamily: fonts.sans,
           }}
         >
           ← Back to Categories
@@ -73,7 +75,7 @@ export default function CategoryProductTypes() {
               margin: 0,
               fontSize: 26,
               fontWeight: 700,
-              color: "#0f0f0f",
+              color: colors.textPrimary,
               letterSpacing: "-0.52px",
               lineHeight: "28.6px",
             }}
@@ -84,8 +86,8 @@ export default function CategoryProductTypes() {
             style={{
               margin: 0,
               fontSize: 14,
-              color: "#696864",
-              fontFamily: "'Instrument Sans', sans-serif",
+              color: colors.textSubdued,
+              fontFamily: fonts.sans,
             }}
           >
             Choose a {singularName} style to start designing
@@ -102,10 +104,10 @@ export default function CategoryProductTypes() {
               gap: 16,
               height: 64,
               padding: "0 16px",
-              background: "#ffffff",
-              border: "1px solid #deddd5",
-              borderRadius: 8,
-              boxShadow: "0px 1px 4px 0px rgba(0,0,0,0.06)",
+              background: colors.cardBg,
+              border: `1px solid ${colors.cardBorder}`,
+              borderRadius: radius.md,
+              boxShadow: shadows.card,
             }}
           >
             {/* Thumbnail */}
@@ -113,9 +115,9 @@ export default function CategoryProductTypes() {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 6,
+                borderRadius: radius.sm,
                 flexShrink: 0,
-                background: "#e9e5d8",
+                background: colors.surfaceMuted,
                 overflow: "hidden",
               }}
             >
@@ -148,8 +150,8 @@ export default function CategoryProductTypes() {
                   style={{
                     fontSize: 14,
                     fontWeight: 500,
-                    color: "#0f0f0f",
-                    fontFamily: "'Instrument Sans', sans-serif",
+                    color: colors.textPrimary,
+                    fontFamily: fonts.sans,
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -163,11 +165,11 @@ export default function CategoryProductTypes() {
                       justifyContent: "center",
                       height: 18,
                       padding: "0 6px",
-                      borderRadius: 4,
-                      background: "#f3eec5",
-                      color: "#988c52",
+                      borderRadius: radius.xs,
+                      background: colors.goldPale,
+                      color: colors.gold,
                       fontSize: 9,
-                      fontFamily: "'DM Mono', monospace",
+                      fontFamily: fonts.mono,
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -179,8 +181,8 @@ export default function CategoryProductTypes() {
                 <span
                   style={{
                     fontSize: 10,
-                    color: "#696864",
-                    fontFamily: "'DM Mono', monospace",
+                    color: colors.textSubdued,
+                    fontFamily: fonts.mono,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -204,12 +206,12 @@ export default function CategoryProductTypes() {
                 style={{
                   fontSize: 13,
                   fontWeight: 600,
-                  color: "#0f0f0f",
-                  fontFamily: "'Instrument Sans', sans-serif",
+                  color: colors.textPrimary,
+                  fontFamily: fonts.sans,
                   whiteSpace: "nowrap",
                 }}
               >
-                From ${Number(pt.basePrice).toFixed(2)}
+                From {formatPrice(pt.basePrice)}
               </span>
               <button
                 type="button"
@@ -217,13 +219,13 @@ export default function CategoryProductTypes() {
                 style={{
                   height: 30,
                   padding: "0 12px",
-                  borderRadius: 6,
+                  borderRadius: radius.sm,
                   border: "none",
-                  background: "#0f0f0f",
-                  color: "#ffffff",
+                  background: colors.textPrimary,
+                  color: colors.cardBg,
                   fontSize: 12,
                   fontWeight: 500,
-                  fontFamily: "'Instrument Sans', sans-serif",
+                  fontFamily: fonts.sans,
                   cursor: "pointer",
                   whiteSpace: "nowrap",
                 }}
