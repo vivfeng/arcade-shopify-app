@@ -2,6 +2,7 @@ import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { Link, useLoaderData, useNavigate } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { colors, fonts, radius } from "../lib/tokens";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -21,23 +22,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const gridStyles: Record<string, React.CSSProperties> = {
   page: {
-    background: "#f7f4f0",
+    background: colors.pageBg,
     minHeight: "100vh",
     padding: "28px 32px 48px",
   },
   title: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 600,
     fontSize: 22,
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     margin: 0,
     lineHeight: "normal",
   },
   subtitle: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 400,
     fontSize: 13,
-    color: "#696864",
+    color: colors.textSubdued,
     margin: "6px 0 0",
     lineHeight: "normal",
   },
@@ -52,9 +53,9 @@ const gridStyles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     display: "flex",
     flexDirection: "column" as const,
-    background: "#ffffff",
-    border: "1px solid #e1dfdb",
-    borderRadius: 8,
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorderSoft}`,
+    borderRadius: radius.md,
     overflow: "hidden",
     transition: "border-color 150ms ease",
     boxSizing: "border-box" as const,
@@ -73,16 +74,16 @@ const gridStyles: Record<string, React.CSSProperties> = {
   imagePlaceholder: {
     width: "100%",
     height: "100%",
-    background: "#e9e5d8",
+    background: colors.surfaceMuted,
   },
   label: {
     padding: "10px 12px",
   },
   labelText: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 13,
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     lineHeight: "normal",
   },
 };
@@ -108,10 +109,10 @@ export default function CategoriesIndex() {
             onClick={() => navigate(`/app/categories/${cat.slug}`)}
             style={gridStyles.card}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#c5c2bc";
+              e.currentTarget.style.borderColor = colors.cardBorderHover;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "#e1dfdb";
+              e.currentTarget.style.borderColor = colors.cardBorderSoft;
             }}
           >
             <div style={gridStyles.imageArea}>

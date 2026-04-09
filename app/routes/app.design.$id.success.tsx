@@ -3,6 +3,8 @@ import { Link, useLoaderData } from "@remix-run/react";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { gidToNumericId } from "../lib/format";
+import { colors, fonts, radius, shadows } from "../lib/tokens";
 
 // ─── Loader ───
 
@@ -40,14 +42,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   });
 };
 
-// ─── Helpers ───
-
-function gidToNumericId(gid: string | null): string | null {
-  if (!gid) return null;
-  const match = gid.match(/\/Product\/(\d+)$/);
-  return match ? match[1] : null;
-}
-
 // ─── Styles ───
 
 const s: Record<string, React.CSSProperties> = {
@@ -56,14 +50,14 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     minHeight: "70vh",
-    background: "#f7f4f0",
+    background: colors.pageBg,
     padding: "32px",
   },
   card: {
     width: 480,
-    background: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0px 1px 4px 0px rgba(0,0,0,0.06)",
+    background: colors.cardBg,
+    borderRadius: radius.lg,
+    boxShadow: shadows.card,
     padding: 48,
     display: "flex",
     flexDirection: "column",
@@ -74,43 +68,43 @@ const s: Record<string, React.CSSProperties> = {
   checkBadge: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    background: "#e8f8ed",
+    borderRadius: radius.full,
+    background: colors.successBg,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#2ca84f",
-    fontFamily: "'Instrument Sans', sans-serif",
+    color: colors.successFg,
+    fontFamily: fonts.sans,
     fontWeight: 600,
     fontSize: 24,
   },
   headline: {
     margin: 0,
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: fonts.display,
     fontWeight: 700,
     fontSize: 28,
     lineHeight: "30.8px",
     letterSpacing: "-0.56px",
-    color: "#0f0f0f",
+    color: colors.textPrimary,
     textAlign: "center" as const,
   },
   subtext: {
     margin: 0,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 400,
     fontSize: 14,
     lineHeight: "22px",
-    color: "#696864",
+    color: colors.textSubdued,
     textAlign: "center" as const,
   },
   primaryCta: {
     height: 44,
     padding: "0 20px",
-    background: "#0f0f0f",
-    color: "#ffffff",
+    background: colors.textPrimary,
+    color: colors.cardBg,
     border: "none",
-    borderRadius: 8,
-    fontFamily: "'Instrument Sans', sans-serif",
+    borderRadius: radius.md,
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 14,
     display: "inline-flex",
@@ -122,11 +116,11 @@ const s: Record<string, React.CSSProperties> = {
   secondaryCta: {
     height: 44,
     padding: "0 20px",
-    background: "#ffffff",
-    color: "#45413b",
-    border: "1px solid #deddd5",
-    borderRadius: 8,
-    fontFamily: "'Instrument Sans', sans-serif",
+    background: colors.cardBg,
+    color: colors.textSecondary,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.md,
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 14,
     display: "inline-flex",
