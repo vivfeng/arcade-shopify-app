@@ -1,4 +1,10 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+#
+# Production config for the `arcadeai` Shopify app. The api_version here
+# MUST match the runtime pin in `app/shopify.server.ts` (ApiVersion enum)
+# and the dev config in `shopify.app.toml`. See ADR 0001 blocker B4 in
+# `docs/adr/0001-remix-to-react-router.md` — version bumps touch all
+# three files in a single commit.
 
 client_id = "a431ff949b793e2470cca4094f2bf97c"
 name = "Arcade.ai"
@@ -10,7 +16,12 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-api_version = "2026-07"
+# Production pin. Must match `ApiVersion.January26` in
+# `app/shopify.server.ts` and the `api_version` in `shopify.app.toml`.
+# See ADR 0001 blocker B4. Do NOT use 2025-01 or earlier (past sunset)
+# or fabricated values like the previous "2026-07" (not exported by
+# the installed @shopify/shopify-api@13).
+api_version = "2026-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
