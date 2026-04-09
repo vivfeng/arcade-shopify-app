@@ -1,0 +1,10 @@
+{
+  "framework": "remix",
+  "buildCommand": "npm run setup && npm run build",
+  "outputDirectory": "build",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
