@@ -1,11 +1,4 @@
-# Shopify app configuration — DEVELOPMENT default.
-#
-# This file is the scaffold/dev fallback. The production config lives in
-# `shopify.app.arcadeai.toml` and is selected via `shopify app config use
-# arcadeai`. Any API version / scope / webhook change must be mirrored in
-# both files AND in `app/shopify.server.ts` (ApiVersion enum). See
-# `docs/architecture.md` for the canonical config matrix.
-#
+# Shopify app configuration
 # client_id will be set after `shopify app config link`
 
 [access_scopes]
