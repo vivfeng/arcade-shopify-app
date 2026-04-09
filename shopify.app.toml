@@ -16,7 +16,9 @@ scopes = "read_products,write_products,read_orders,write_orders,read_fulfillment
 redirect_urls = [ "https://localhost/auth/callback" ]
 
 [webhooks]
-api_version = "2025-01"
+# Must match `ApiVersion.January26` in `app/shopify.server.ts` and the
+# `api_version` in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4.
+api_version = "2026-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
