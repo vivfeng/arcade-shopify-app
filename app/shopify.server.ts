@@ -13,10 +13,15 @@ import db from "./db.server";
 // drift, webhook payload shapes and GraphQL typegen disagree at
 // runtime. Bumps touch all three files in a single commit. See
 // ADR 0001 blocker B4 in `docs/adr/0001-remix-to-react-router.md`.
+//
+// Pinned to `January26` ("2026-01"). Shopify supports each stable API
+// version for 12 months after release, so 2026-01 has runway through
+// ~2027-01. Do not use 2025-01 or earlier — they are past sunset and
+// Shopify auto-upgrades them, introducing unpredictable behavior.
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
-  apiVersion: ApiVersion.January25,
+  apiVersion: ApiVersion.January26,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",

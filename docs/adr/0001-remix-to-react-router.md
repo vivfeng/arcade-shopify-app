@@ -110,7 +110,7 @@ dependency swap. Rationale:
 | `prisma/schema.prisma` | **1:1 copy** | `prisma/schema.prisma` | Framework-agnostic. Re-evaluate second-backend tables before copying — see matrix below. |
 | `prisma/migrations/` | **1:1 copy** | `prisma/migrations/` | Migration history stays intact so the DB does not re-migrate. |
 | `prisma/seed.ts` | **1:1 copy** | `prisma/seed.ts` | |
-| `shopify.app*.toml` | **Copy, align API version** | same filenames | Fix the existing drift (`shopify.app.arcadeai.toml` still says `2026-07`, which the installed SDK does not support). |
+| `shopify.app*.toml` | **Copy, align API version** | same filenames | Carry the `2026-01` pin forward (current value on `claude/address-review-findings-uSZrc`). Re-evaluate against whatever the React Router template ships. |
 
 ### Signature-level example (loader + action)
 
@@ -211,18 +211,37 @@ should start from `session.shop`, never from `findFirst()`.
 
 ### B4. Config version drift
 
-Three config sources currently disagree on the Shopify API version:
+Three config sources used to disagree on the Shopify API version:
 
-- `app/shopify.server.ts`: `ApiVersion.January25`
-- `shopify.app.toml`: `api_version = "2025-01"`
-- `shopify.app.arcadeai.toml`: `api_version = "2026-07"` (not a real
-  release of `@shopify/shopify-api@13`)
+- `app/shopify.server.ts`: `ApiVersion.January25` *(past sunset)*
+- `shopify.app.toml`: `api_version = "2025-01"` *(past sunset)*
+- `shopify.app.arcadeai.toml`: `api_version = "2026-07"` *(fabricated —
+  not exported by the installed `@shopify/shopify-api@13`)*
 
-Align to whichever version the React Router template ships (if
-newer), otherwise keep `2025-01` and bump as a follow-up. Whatever the
-choice, all three files must move together — and the new repo should
-have a comment in each file pointing at this ADR so the lockstep rule
-is visible to the next person.
+**Resolved on `claude/address-review-findings-uSZrc`:** aligned all
+three on `2026-01` / `ApiVersion.January26`. Selection rationale:
+
+- `@shopify/shopify-api@13.0.0` exports `October24`, `January25`,
+  `April25`, `July25`, `October25`, `January26`, `April26`, and
+  `Unstable`. (Verified by unpacking the v13.0.0 tarball from the npm
+  registry — see `dist/ts/lib/types.d.ts`.)
+- Shopify supports each stable API version for 12 months after
+  release. Versions prior to `2025-04` are past sunset as of 2026-04
+  and get auto-upgraded by Shopify at call time — unpredictable
+  behavior we should not ship against in production.
+- `January26` is the newest *non-bleeding-edge* option — released
+  ~3 months ago, battle-tested, with roughly 9 months of remaining
+  support runway. `April26` is the absolute latest but minted this
+  quarter; we would rather not debug brand-new API behavior in prod.
+- On bump: change all three files in the same commit. The runtime
+  enum in `shopify.server.ts` and the webhook `api_version` in both
+  tomls must agree, or webhook payloads arrive in a shape the runtime
+  did not expect. Each file carries an inline comment pointing at
+  this ADR so the lockstep rule is unmissable.
+
+The React Router rescaffold (M0) will re-evaluate the pin based on
+whichever version the official `@shopify/shopify-app-react-router`
+template ships.
 
 ## Consequences
 

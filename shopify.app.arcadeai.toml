@@ -16,7 +16,12 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-api_version = "2025-01"
+# Production pin. Must match `ApiVersion.January26` in
+# `app/shopify.server.ts` and the `api_version` in `shopify.app.toml`.
+# See ADR 0001 blocker B4. Do NOT use 2025-01 or earlier (past sunset)
+# or fabricated values like the previous "2026-07" (not exported by
+# the installed @shopify/shopify-api@13).
+api_version = "2026-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
