@@ -1,4 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+#
+# Canonical environment config for the `arcadeai` Shopify app (production).
+# API version must stay in sync with `shopify.server.ts` (`ApiVersion` enum)
+# and `shopify.app.toml`. See `docs/adr/0001-remix-to-react-router.md` for
+# the version pinning rationale and the upgrade checklist.
 
 client_id = "a431ff949b793e2470cca4094f2bf97c"
 name = "Arcade.ai"
@@ -10,7 +15,7 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2025-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
