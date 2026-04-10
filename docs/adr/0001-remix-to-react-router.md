@@ -158,7 +158,14 @@ The reviewer correctly flagged that the Shopify app DB is drifting
 toward being a second Arcade backend. Before copying `schema.prisma`
 into the new repo we need a decision — per entity — on whether it
 stays, moves to the Arcade BE, or becomes a local cache of the Arcade
-BE. Proposed default positions, **to be ratified with BE owner**:
+BE.
+
+**Canonical matrix:** [`docs/architecture/source-of-truth-matrix.md`](../architecture/source-of-truth-matrix.md)
+— draft proposal awaiting BE-owner sign-off. The inline table below
+is kept for quick reference but the standalone doc is authoritative
+once BE has ratified it.
+
+Proposed default positions, **to be ratified with BE owner**:
 
 | Entity | Current location | Proposed owner | Rationale |
 |---|---|---|---|
