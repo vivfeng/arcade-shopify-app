@@ -158,22 +158,54 @@ The reviewer correctly flagged that the Shopify app DB is drifting
 toward being a second Arcade backend. Before copying `schema.prisma`
 into the new repo we need a decision — per entity — on whether it
 stays, moves to the Arcade BE, or becomes a local cache of the Arcade
-BE. Proposed default positions, **to be ratified with BE owner**:
+BE.
+
+Artsem's follow-up framing (2026-04-09): **keep the Shopify app's
+persistence as thin as possible.** Only the entities that must live
+next to the Shopify session belong here. Everything that represents
+Arcade business/domain truth belongs in the Arcade BE. Proposed
+default positions, **to be ratified with BE owner**:
 
 | Entity | Current location | Proposed owner | Rationale |
 |---|---|---|---|
+| **— App-local persistence (must stay here) —** | | | |
 | `Session` | Shopify app DB | **Shopify app DB** | Required by `@shopify/shopify-app-session-storage-prisma`. Must be local. |
-| `Shop` | Shopify app DB | **Shopify app DB** | Binds Shopify domain → access token → Arcade account id. Must be local. |
+| `Shop` | Shopify app DB | **Shopify app DB** | Binds Shopify domain → access token → Arcade account id. Must be local. Also holds install/link state (`installedAt`, `uninstalledAt`, `arcadeAccountId`). |
+| `WebhookEvent` *(new)* | — | **Shopify app DB** | Idempotency/dedup table keyed on Shopify's `X-Shopify-Webhook-Id` header. Shopify retries on 5xx and may double-deliver; today the 5 webhook handlers dedupe *accidentally* by being naturally idempotent. `orders/create` (BE-1682) will break that invariant — replace accidental idempotency with explicit dedup before the first webhook with real side effects lands. |
+| `OutboxEvent` *(new)* | — | **Shopify app DB** | Durable job/outbox table for events the app needs to forward to Arcade BE (orders/create, publish results, fulfillment updates). Webhook handler writes a row in the same transaction as any side-effect; a background worker drains to BE with retries. Avoids "did the webhook succeed but forwarding fail?" ambiguity. |
+| **— Arcade BE is source of truth (app is thin or gone) —** | | | |
+| `ArcadeAccount` *(not yet modeled)* | — | **Arcade BE** | Arcade's user/account identity. App only stores the `arcadeAccountId` on its `Shop` row as a foreign key. No account PII lives here. |
 | `ProductCategory` | Shopify app DB | **Arcade BE** | Catalog master data. App reads via API, caches in memory or HTTP-cache. |
-| `ProductType` | Shopify app DB | **Arcade BE** | Same. Includes `specs`, `basePrice`, `sizeOptions`, `fabricOptions`, `manufacturerId` — all catalog. |
-| `Manufacturer` | Shopify app DB | **Arcade BE** | Pure reference data. No reason to duplicate. |
-| `ArcadeProduct` | Shopify app DB | **Arcade BE** (source) + local mirror | BE is canonical; the app keeps a thin mirror row so loaders can render without an extra round-trip and so `shopifyProductGid` reconciliation has a place to live. |
+| `ProductType` | Shopify app DB | **Arcade BE** | Catalog. Includes `specs`, `sizeOptions`, `fabricOptions`, `manufacturerId`. |
+| `ManufacturerCapability` *(reshape)* | Shopify app DB (`Manufacturer` reference row) | **Arcade BE** | Today's `Manufacturer` is a static reference row (name + contact). Artsem's framing is a live capability mapping: which manufacturer can make which product type at which size/fabric combo, with lead times and minimums. That's a BE concern, not static reference data. |
+| `AIGeneration` *(not yet modeled)* | — (today `ArcadeProduct.designPrompt`) | **Arcade BE** | The prompt, the model output, image URLs, refinement history — all belong next to the real AI pipeline (AII-826). App never stores generation state directly; it holds a foreign key on the mirror row. |
+| `ArcadeProduct` | Shopify app DB | **Arcade BE** (source) + local mirror | BE is canonical. App keeps a thin mirror row so loaders can render without an extra round-trip and so `shopifyProductGid` reconciliation has a place to live. |
 | `ProductVariant` | Shopify app DB | **Arcade BE** (source) + local mirror | Same pattern as `ArcadeProduct`. |
-| `ArcadeOrder` | Shopify app DB | **Arcade BE** | Webhook lands here, app forwards to BE, BE becomes source of truth. App retains a view-only mirror for the Orders dashboard. |
+| `Pricing` *(not yet modeled — scattered today)* | `ProductType.basePrice`, `ArcadeProduct`, FE-4110 pricing screen state | **Arcade BE** | Pricing truth — cost, margin, manufacturer payout, entrepreneur markup. FE-4110 pricing screen reads via API only. App never writes pricing. |
+| `ArcadeOrder` | Shopify app DB | **Arcade BE** (source) + view-only mirror | Webhook lands here, app writes to `OutboxEvent`, a worker forwards to BE, BE becomes source of truth. App retains a view-only mirror for the Orders dashboard. |
+| `OrderRouting` *(not yet modeled)* | — | **Arcade BE** | Manufacturer matching and routing logic (BE-1683). App never runs routing. |
+| `FulfillmentState` *(reshape — today `ArcadeOrder.fulfillmentStatus`)* | Shopify app DB | **Arcade BE** | Fulfillment progression (BE-1685). App forwards Shopify fulfillment webhooks via `OutboxEvent`; BE owns the state machine. The Orders dashboard reads the mirror. |
 
 The matrix above is a starting point for the BE conversation — it is
 not the decision. The decision is "run this past [BE owner], get a
 yes/no per row, lock the answer in before scaffold-time."
+
+**What changed in this revision (2026-04-09):**
+
+- Added `WebhookEvent` and `OutboxEvent` as explicit app-local
+  primitives per Artsem's follow-up. Neither exists in the current
+  schema. Both must land in the M0 rescaffold's fresh Prisma schema,
+  not after.
+- Split six BE rows out of the `ArcadeProduct` / `ArcadeOrder` /
+  `Manufacturer` umbrellas: `ArcadeAccount`, `AIGeneration`,
+  `ManufacturerCapability`, `Pricing`, `OrderRouting`,
+  `FulfillmentState`. The umbrellas were hiding concerns that should
+  be named separately in the BE conversation, so each can get its
+  own yes/no.
+- Reframed `Manufacturer` → `ManufacturerCapability`. Today's static
+  reference table is fine for seeding MVP; it is the wrong shape for
+  routing.
+- Tracking ticket: FE-4143.
 
 ### B2. Publish state machine
 
