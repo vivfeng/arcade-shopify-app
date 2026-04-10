@@ -28,18 +28,20 @@ api_version = "2026-01"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes-update"
 
+  # GDPR compliance webhooks. Use `compliance_topics` only — the
+  # Shopify CLI delivers these via a separate signed channel and a
+  # subscription cannot mix `topics` and `compliance_topics` for the
+  # same event. Must stay byte-for-byte aligned with the prod config
+  # in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4.
   [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
   uri = "/webhooks/customers/data-request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
   uri = "/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
   uri = "/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
