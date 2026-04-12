@@ -9,6 +9,7 @@ import {
 } from "@remix-run/react";
 import { Fragment, useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { colors as tokens, fonts } from "../lib/tokens";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -320,17 +321,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 // ─── Styles ─────────────────────────────────────────────────────────
 
+// Local aliases over the shared design tokens so the rest of this file
+// can keep its short, table-oriented names (bg, text, rowAlt, etc.)
+// without duplicating the hex values that live in app/lib/tokens.ts.
+// Only `accent` and `badgeFill` are Orders-specific and stay inline.
 const colors = {
-  bg: "#f7f4f0",
-  cardBg: "#ffffff",
-  border: "#e1dfdb",
-  borderHover: "#c5c2bc",
-  text: "#0f0f0f",
-  textMuted: "#696864",
-  textSubtle: "#45413b",
+  bg: tokens.pageBg,
+  cardBg: tokens.cardBg,
+  border: tokens.cardBorderSoft,
+  borderHover: tokens.cardBorderHover,
+  text: tokens.textPrimary,
+  textMuted: tokens.textSubdued,
+  textSubtle: tokens.textSecondary,
   accent: "#fcff7b",
-  monoAccent: "#988c52",
-  rowAlt: "#f7f4f0",
+  monoAccent: tokens.gold,
+  rowAlt: tokens.pageBg,
   badgeFill: "#edecea",
 };
 
@@ -339,7 +344,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.bg,
     minHeight: "100vh",
     padding: "28px 32px 48px",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
   },
   headerRow: {
     display: "flex",
@@ -348,7 +353,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 20,
   },
   title: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 600,
     fontSize: 26,
     color: colors.text,
@@ -368,7 +373,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 18,
     height: 36,
     padding: "0 20px",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 13,
     color: colors.text,
@@ -383,7 +388,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 18,
     height: 36,
     padding: "0 20px",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 13,
     color: colors.text,
@@ -411,7 +416,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     gap: 8,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.textMuted,
     borderBottom: "2px solid transparent",
@@ -429,7 +434,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 22,
     height: 18,
     padding: "0 6px",
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 600,
     fontSize: 11,
     display: "inline-flex",
@@ -454,7 +459,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.bg,
     border: `1px solid ${colors.border}`,
     borderRadius: 6,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.text,
     boxSizing: "border-box" as const,
@@ -467,7 +472,7 @@ const styles: Record<string, React.CSSProperties> = {
     transform: "translateY(-50%)",
     color: colors.textMuted,
     fontSize: 13,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     pointerEvents: "none" as const,
   },
   select: {
@@ -476,7 +481,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.cardBg,
     border: `1px solid ${colors.border}`,
     borderRadius: 6,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.text,
     boxSizing: "border-box" as const,
@@ -489,7 +494,7 @@ const styles: Record<string, React.CSSProperties> = {
     tableLayout: "fixed" as const,
   },
   th: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 600,
     fontSize: 11,
     color: colors.textMuted,
@@ -507,7 +512,7 @@ const styles: Record<string, React.CSSProperties> = {
   td: {
     padding: "16px 12px",
     borderBottom: `1px solid ${colors.border}`,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.text,
     verticalAlign: "middle" as const,
@@ -538,7 +543,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 18,
     padding: "0 7px",
     borderRadius: 9,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 10,
     lineHeight: "normal",
@@ -569,7 +574,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: `1px solid ${colors.border}`,
   },
   paginationLabel: {
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 12,
     color: colors.textMuted,
   },
@@ -585,7 +590,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.cardBg,
     border: `1px solid ${colors.border}`,
     borderRadius: 16,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontWeight: 500,
     fontSize: 13,
     color: colors.text,
@@ -605,7 +610,7 @@ const styles: Record<string, React.CSSProperties> = {
   emptyState: {
     padding: "48px 24px",
     textAlign: "center" as const,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.textMuted,
   },
@@ -618,7 +623,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(4, 1fr)",
     gap: 16,
-    fontFamily: "'Instrument Sans', sans-serif",
+    fontFamily: fonts.sans,
     fontSize: 12,
   },
   detailLabel: {
