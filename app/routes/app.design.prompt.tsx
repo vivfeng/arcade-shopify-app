@@ -1,9 +1,14 @@
-import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useNavigate, useFetcher } from "@remix-run/react";
+import { data, type LoaderFunctionArgs, type ActionFunctionArgs, useLoaderData, useNavigate, useFetcher } from "react-router";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
+import {
+  requestDesignGeneration,
+  pollDesignDocument,
+  requestDesignRegenerate,
+  requestDesignEdit,
+} from "../lib/arcadeApi";
 import { useState, useCallback } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -32,48 +37,321 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Product type not found", { status: 404 });
   }
 
-  return json({ productType });
+  return data({ productType });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
-  const prompt = formData.get("prompt") as string;
-  const productTypeId = formData.get("productTypeId") as string;
+  const intent = (formData.get("intent") as string) || "generate";
 
-  if (!prompt || !productTypeId) {
-    return json({ error: "Prompt and product type are required" }, { status: 400 });
-  }
-
-  // Scope the shop lookup to the authenticated session. Using findFirst
-  // here (the previous behavior) would attach new products to whichever
-  // Shop row happened to sort first in a multi-store install — see
-  // ADR 0001 blocker B3 and the "Ticket requirements" rule in README.md.
+  // ── Auth: resolve the shop for all intents ──
   const shop = await db.shop.findUnique({
     where: { domain: session.shop },
     select: { id: true },
   });
 
   if (!shop) {
-    return json({ error: "Shop not found for authenticated session" }, { status: 400 });
+    return data({ error: "Shop not found for authenticated session" }, { status: 400 });
   }
 
-  // TODO(AII-826): Call Arcade AI design API.
-  // The implementation must target React Router, not Remix — see
-  // `docs/adr/0001-remix-to-react-router.md`. Do not introduce new
-  // `@remix-run/*` imports in the ticket that picks this up.
-  // For now, create a draft product scoped to the authenticated shop.
+  // ── Shared helpers ──
+
+  /** Normalize an Arcade design document into a flat image list. */
+  function extractImages(designDoc: {
+    imageUrls?: string[];
+    patternUrl?: string;
+    makerImageUrl?: string;
+  }): string[] {
+    const urls = [...(designDoc.imageUrls ?? [])];
+    if (designDoc.patternUrl && !urls.includes(designDoc.patternUrl)) {
+      urls.unshift(designDoc.patternUrl);
+    }
+    if (designDoc.makerImageUrl && !urls.includes(designDoc.makerImageUrl)) {
+      urls.push(designDoc.makerImageUrl);
+    }
+    return urls;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INTENT: edit — iterative descriptive edit on an existing design
+  // ═══════════════════════════════════════════════════════════════════
+  if (intent === "edit") {
+    const parentProductId = formData.get("parentProductId") as string;
+    const editInstruction = formData.get("editInstruction") as string;
+
+    if (!parentProductId || !editInstruction) {
+      return data(
+        { error: "Parent product ID and edit instruction are required" },
+        { status: 400 },
+      );
+    }
+
+    // Load the parent product to get the generationId + context
+    const parentProduct = await db.arcadeProduct.findUnique({
+      where: { id: parentProductId },
+      select: {
+        id: true,
+        generationId: true,
+        arcadeDocumentId: true,
+        designPrompt: true,
+        productTypeId: true,
+        shopId: true,
+      },
+    });
+
+    if (!parentProduct) {
+      return data({ error: "Parent product not found" }, { status: 404 });
+    }
+
+    // The generationId is the key for chaining edits. Fall back to
+    // arcadeDocumentId if the generation predates the generationId field.
+    const sourceGenerationId =
+      parentProduct.generationId ?? parentProduct.arcadeDocumentId;
+
+    if (!sourceGenerationId) {
+      return data(
+        { error: "Parent product has no generation ID — cannot edit" },
+        { status: 400 },
+      );
+    }
+
+    let arcadeDocumentId: string | null = null;
+    let generationId: string | null = null;
+    let imageUrls: string[] = [];
+    let suggestedTitle: string | null = null;
+    let suggestedDescription: string | null = null;
+
+    try {
+      const editResponse = await requestDesignEdit({
+        generationId: sourceGenerationId,
+        editInstruction,
+        shopId: shop.id,
+      });
+      arcadeDocumentId = editResponse.documentId;
+
+      const designDoc = await pollDesignDocument(editResponse.documentId);
+      generationId = designDoc.generationId ?? null;
+      imageUrls = extractImages(designDoc);
+      suggestedTitle = designDoc.suggestedTitle ?? null;
+      suggestedDescription = designDoc.suggestedDescription ?? null;
+    } catch (err) {
+      console.error("[AII-826] Arcade design edit failed:", err);
+    }
+
+    // Create a new ArcadeProduct row linked to the parent
+    const product = await db.arcadeProduct.create({
+      data: {
+        designPrompt: parentProduct.designPrompt,
+        arcadeDocumentId,
+        generationId,
+        imageUrls: imageUrls.length > 0 ? imageUrls : [],
+        shopId: parentProduct.shopId,
+        productTypeId: parentProduct.productTypeId,
+        parentProductId: parentProduct.id,
+        status: "DRAFT",
+        title: suggestedTitle,
+        description: suggestedDescription,
+      },
+    });
+
+    return data({
+      productId: product.id,
+      imageUrls,
+      arcadeDocumentId,
+      generationId,
+      parentProductId: parentProduct.id,
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INTENT: regenerate — same prompt, fresh variations
+  // ═══════════════════════════════════════════════════════════════════
+  if (intent === "regenerate") {
+    const parentProductId = formData.get("parentProductId") as string;
+
+    if (!parentProductId) {
+      return data(
+        { error: "Parent product ID is required for regenerate" },
+        { status: 400 },
+      );
+    }
+
+    const parentProduct = await db.arcadeProduct.findUnique({
+      where: { id: parentProductId },
+      select: {
+        id: true,
+        generationId: true,
+        arcadeDocumentId: true,
+        designPrompt: true,
+        productTypeId: true,
+        shopId: true,
+        productType: { select: { slug: true } },
+      },
+    });
+
+    if (!parentProduct) {
+      return data({ error: "Parent product not found" }, { status: 404 });
+    }
+
+    const sourceGenerationId =
+      parentProduct.generationId ?? parentProduct.arcadeDocumentId;
+
+    // Collect optional structured inputs (may have changed between generations)
+    const colorsValue = (formData.get("colors") as string) || undefined;
+    const artistValue = (formData.get("artist") as string) || undefined;
+    const promptValue =
+      (formData.get("prompt") as string) || parentProduct.designPrompt || "";
+
+    let arcadeDocumentId: string | null = null;
+    let generationId: string | null = null;
+    let imageUrls: string[] = [];
+    let suggestedTitle: string | null = null;
+    let suggestedDescription: string | null = null;
+
+    try {
+      if (sourceGenerationId) {
+        // Use regenerate endpoint if we have a generationId
+        const regenResponse = await requestDesignRegenerate({
+          generationId: sourceGenerationId,
+          prompt: promptValue,
+          generationType: parentProduct.productType.slug,
+          colors: colorsValue,
+          artistStyle: artistValue,
+        });
+        arcadeDocumentId = regenResponse.documentId;
+
+        const designDoc = await pollDesignDocument(regenResponse.documentId);
+        generationId = designDoc.generationId ?? null;
+        imageUrls = extractImages(designDoc);
+        suggestedTitle = designDoc.suggestedTitle ?? null;
+        suggestedDescription = designDoc.suggestedDescription ?? null;
+      } else {
+        // Fallback: no generationId yet, do a fresh generate
+        const genResponse = await requestDesignGeneration({
+          prompt: promptValue,
+          generationType: parentProduct.productType.slug,
+          colors: colorsValue,
+          artistStyle: artistValue,
+        });
+        arcadeDocumentId = genResponse.documentId;
+        generationId = genResponse.generationId ?? null;
+
+        const designDoc = await pollDesignDocument(genResponse.documentId);
+        generationId = designDoc.generationId ?? generationId;
+        imageUrls = extractImages(designDoc);
+        suggestedTitle = designDoc.suggestedTitle ?? null;
+        suggestedDescription = designDoc.suggestedDescription ?? null;
+      }
+    } catch (err) {
+      console.error("[AII-826] Arcade design regeneration failed:", err);
+    }
+
+    // Create a new ArcadeProduct linked to the parent
+    const product = await db.arcadeProduct.create({
+      data: {
+        designPrompt: promptValue,
+        arcadeDocumentId,
+        generationId,
+        imageUrls: imageUrls.length > 0 ? imageUrls : [],
+        shopId: parentProduct.shopId,
+        productTypeId: parentProduct.productTypeId,
+        parentProductId: parentProduct.id,
+        status: "DRAFT",
+        title: suggestedTitle,
+        description: suggestedDescription,
+      },
+    });
+
+    return data({
+      productId: product.id,
+      imageUrls,
+      arcadeDocumentId,
+      generationId,
+      parentProductId: parentProduct.id,
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INTENT: generate (default) — initial design from prompt
+  // ═══════════════════════════════════════════════════════════════════
+  const prompt = formData.get("prompt") as string;
+  const productTypeId = formData.get("productTypeId") as string;
+
+  if (!prompt || !productTypeId) {
+    return data(
+      { error: "Prompt and product type are required" },
+      { status: 400 },
+    );
+  }
+
+  const colorsValue = (formData.get("colors") as string) || undefined;
+  const artistValue = (formData.get("artist") as string) || undefined;
+
+  const productType = await db.productType.findUnique({
+    where: { id: productTypeId },
+    select: { slug: true },
+  });
+
+  if (!productType) {
+    return data({ error: "Product type not found" }, { status: 400 });
+  }
+
+  // AII-826: Call the Arcade staging backend design-from-prompt async API.
+  //
+  // Flow: POST to /design/generate → receive a documentId immediately →
+  // poll the Firestore-backed document until it populates with images.
+  //
+  // ⚠️  Currently pointed at staging backend (https://api.staging.arcade.ai).
+  // See: https://api.staging.arcade.ai/swagger/
+
+  let arcadeDocumentId: string | null = null;
+  let generationId: string | null = null;
+  let imageUrls: string[] = [];
+  let suggestedTitle: string | null = null;
+  let suggestedDescription: string | null = null;
+
+  try {
+    const generation = await requestDesignGeneration({
+      prompt,
+      generationType: productType.slug,
+      colors: colorsValue,
+      artistStyle: artistValue,
+    });
+    arcadeDocumentId = generation.documentId;
+    generationId = generation.generationId ?? null;
+
+    const designDoc = await pollDesignDocument(generation.documentId);
+    generationId = designDoc.generationId ?? generationId;
+    imageUrls = extractImages(designDoc);
+    suggestedTitle = designDoc.suggestedTitle ?? null;
+    suggestedDescription = designDoc.suggestedDescription ?? null;
+  } catch (err) {
+    console.error("[AII-826] Arcade design generation failed:", err);
+    // Still create the draft so the merchant's prompt isn't lost.
+  }
+
   const product = await db.arcadeProduct.create({
     data: {
       designPrompt: prompt,
+      arcadeDocumentId,
+      generationId,
+      imageUrls: imageUrls.length > 0 ? imageUrls : [],
       shopId: shop.id,
       productTypeId,
       status: "DRAFT",
+      title: suggestedTitle,
+      description: suggestedDescription,
     },
   });
 
-  return json({ productId: product.id });
+  return data({
+    productId: product.id,
+    imageUrls,
+    arcadeDocumentId,
+    generationId,
+  });
 };
 
 // ─── Styles ───
@@ -219,82 +497,157 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: colors.textPrimary,
   },
-  // Draft-saved confirmation card. The full AI design + pricing screens
-  // are not shipped yet (tracked in ADR 0001 M0), so on success we stay
-  // on this page and surface a confirmation instead of navigating to a
-  // route that does not exist.
-  successCard: {
+  // ── Loading state ──
+  loadingCard: {
     background: colors.cardBg,
     border: `1px solid ${colors.cardBorder}`,
     borderRadius: radius.lg,
     boxShadow: shadows.card,
-    padding: 24,
+    padding: 40,
     display: "flex",
     flexDirection: "column" as const,
-    alignItems: "flex-start" as const,
-    gap: 14,
-  },
-  successBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    background: colors.successBg,
-    color: colors.successFg,
-    display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    fontSize: 22,
-    fontWeight: 600,
+    gap: 12,
   },
-  successHeading: {
+  spinner: {
+    width: 32,
+    height: 32,
+    border: `3px solid ${colors.surfaceMuted}`,
+    borderTopColor: colors.gold,
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  },
+  loadingText: {
     margin: 0,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 600,
     color: colors.textPrimary,
     fontFamily: fonts.sans,
   },
-  successSubtext: {
-    margin: "4px 0 0",
+  loadingSubtext: {
+    margin: 0,
     fontSize: 13,
-    lineHeight: "20px",
     color: colors.textSubdued,
     fontFamily: fonts.sans,
   },
-  successActions: {
+  // ── Error state ──
+  errorCard: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: radius.lg,
+    padding: 16,
+  },
+  errorText: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: "22px",
+    color: "#991b1b",
+    fontFamily: fonts.sans,
+  },
+  // ── Design results (inline PDP) ──
+  resultsSection: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 16,
+  },
+  mainImageContainer: {
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.lg,
+    boxShadow: shadows.card,
+    overflow: "hidden",
+    aspectRatio: "1",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mainImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover" as const,
+  },
+  thumbnailRow: {
     display: "flex",
     gap: 8,
-    marginTop: 4,
+    overflowX: "auto" as const,
   },
-  successPrimary: {
-    height: 40,
-    padding: "0 16px",
-    background: colors.textPrimary,
-    color: colors.cardBg,
-    border: "none",
+  thumbnail: {
+    width: 72,
+    height: 72,
+    flexShrink: 0,
     borderRadius: radius.md,
-    fontSize: 13,
-    fontWeight: 500,
-    fontFamily: fonts.sans,
+    border: `2px solid transparent`,
+    padding: 0,
     cursor: "pointer",
+    overflow: "hidden",
+    background: colors.surfaceMuted,
   },
-  successSecondary: {
+  thumbnailSelected: {
+    borderColor: colors.gold,
+  },
+  thumbnailImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover" as const,
+    display: "block",
+  },
+  resultsActions: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  secondaryButton: {
     height: 40,
     padding: "0 16px",
     background: colors.cardBg,
     color: colors.textSecondary,
     border: `1px solid ${colors.cardBorder}`,
     borderRadius: radius.md,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 500,
     fontFamily: fonts.sans,
     cursor: "pointer",
   },
-  successDraftId: {
-    margin: 0,
-    fontSize: 10,
-    color: colors.gold,
-    fontFamily: fonts.mono,
-    letterSpacing: "0.3px",
+  // ── Edit Design affordance ──
+  editCard: {
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.lg,
+    boxShadow: shadows.card,
+    padding: 12,
+  },
+  editRow: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  editInput: {
+    flex: 1,
+    height: 40,
+    padding: "0 12px",
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radius.md,
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.textPrimary,
+    background: "transparent",
+    outline: "none",
+  },
+  editButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    height: 40,
+    padding: "0 16px",
+    borderRadius: radius.md,
+    border: "none",
+    background: colors.textPrimary,
+    color: colors.cardBg,
+    fontSize: 14,
+    fontWeight: 600,
+    fontFamily: fonts.sans,
+    cursor: "pointer",
+    flexShrink: 0,
   },
 };
 
@@ -389,27 +742,53 @@ const COLOR_OPTIONS = [
 export default function PromptDesign() {
   const { productType } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const fetcher = useFetcher<{ productId?: string; error?: string }>();
+  const fetcher = useFetcher<{
+    productId?: string;
+    imageUrls?: string[];
+    arcadeDocumentId?: string;
+    generationId?: string;
+    parentProductId?: string;
+    error?: string;
+  }>();
 
   const [prompt, setPrompt] = useState("");
   const [selectedColors, setSelectedColors] = useState<string | null>(null);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [selectedImageIdx, setSelectedImageIdx] = useState(0);
+  const [editInstruction, setEditInstruction] = useState("");
 
   const isSubmitting = fetcher.state !== "idle";
   const canGenerate = prompt.trim().length > 0 && !isSubmitting;
 
-  // Navigate to design flow on success
+  // Results from the Arcade staging backend
+  const generatedImages =
+    fetcher.data && "imageUrls" in fetcher.data
+      ? (fetcher.data.imageUrls ?? [])
+      : [];
+  const savedProductId =
+    fetcher.data && "productId" in fetcher.data
+      ? fetcher.data.productId
+      : null;
+  const hasResults = generatedImages.length > 0;
+  const generationFailed =
+    savedProductId != null && !hasResults && fetcher.state === "idle";
+  const mainImage = generatedImages[selectedImageIdx] ?? generatedImages[0];
+
+  // ── Generate (initial) ──
   const handleGenerate = useCallback(() => {
     if (!canGenerate) return;
 
-    // Build the full prompt with structured inputs
     let fullPrompt = prompt.trim();
     if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
     if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
 
+    setSelectedImageIdx(0);
+    setEditInstruction("");
+
     fetcher.submit(
       {
+        intent: "generate",
         prompt: fullPrompt,
         productTypeId: productType.id,
         colors: selectedColors || "",
@@ -419,15 +798,49 @@ export default function PromptDesign() {
     );
   }, [canGenerate, prompt, selectedColors, selectedArtist, productType.id, fetcher]);
 
-  // The full AI design + pricing flow is not shipped yet (tracked in
-  // ADR 0001 M0). On success, stay on this page and surface a draft
-  // confirmation instead of navigating to `/app/design/:id`, which
-  // does not exist as a route yet. See review finding #3 and
-  // docs/tickets/artsem-review-epic.md subticket fix 2.
-  const savedProductId =
-    fetcher.data && "productId" in fetcher.data
-      ? fetcher.data.productId
-      : null;
+  // ── Regenerate (same prompt, fresh variations) ──
+  const handleRegenerate = useCallback(() => {
+    if (!savedProductId || isSubmitting) return;
+
+    let fullPrompt = prompt.trim();
+    if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
+    if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
+
+    setSelectedImageIdx(0);
+    setEditInstruction("");
+
+    fetcher.submit(
+      {
+        intent: "regenerate",
+        parentProductId: savedProductId,
+        prompt: fullPrompt,
+        colors: selectedColors || "",
+        artist: selectedArtist || "",
+      },
+      { method: "post" },
+    );
+  }, [savedProductId, isSubmitting, prompt, selectedColors, selectedArtist, fetcher]);
+
+  // ── Iterative edit ──
+  const canEdit =
+    editInstruction.trim().length > 0 && savedProductId != null && !isSubmitting;
+
+  const handleEdit = useCallback(() => {
+    if (!canEdit || !savedProductId) return;
+
+    setSelectedImageIdx(0);
+
+    fetcher.submit(
+      {
+        intent: "edit",
+        parentProductId: savedProductId,
+        editInstruction: editInstruction.trim(),
+      },
+      { method: "post" },
+    );
+
+    setEditInstruction("");
+  }, [canEdit, savedProductId, editInstruction, fetcher]);
 
   return (
     <Page>
@@ -447,51 +860,12 @@ export default function PromptDesign() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <h1 style={s.heading}>Prompt Design</h1>
           <p style={s.subtitle}>
-            {savedProductId
-              ? "Your draft prompt has been saved."
-              : "Describe your design and let AI create it for you"}
+            Describe your design and let AI create it for you
           </p>
         </div>
 
-        {savedProductId ? (
-          /* Draft saved — in-place confirmation */
-          <div style={s.successCard}>
-            <div style={s.successBadge} aria-hidden="true">
-              ✓
-            </div>
-            <div>
-              <h2 style={s.successHeading}>Draft saved</h2>
-              <p style={s.successSubtext}>
-                We've stored your prompt for this{" "}
-                {productType.name.toLowerCase()}. The AI design studio
-                and pricing flow are coming soon — you'll be notified
-                when they're ready.
-              </p>
-            </div>
-            <div style={s.successActions}>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/app/categories/${productType.category.slug}`)
-                }
-                style={s.successPrimary}
-              >
-                Create another draft
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/app/categories")}
-                style={s.successSecondary}
-              >
-                Browse categories
-              </button>
-            </div>
-            <p style={s.successDraftId}>Draft id: {savedProductId}</p>
-          </div>
-        ) : (
-          /* Prompt card */
-          <div style={s.card}>
-          {/* Text area */}
+        {/* Prompt card — always visible so the merchant can iterate */}
+        <div style={s.card}>
           <textarea
             style={s.textarea}
             placeholder={`Describe your ${productType.name.toLowerCase()} design...\n\nFor example: "A floral pattern with soft peonies and eucalyptus leaves, hand-painted feel, light cream background"`}
@@ -503,7 +877,6 @@ export default function PromptDesign() {
 
           {/* Structured input chips */}
           <div style={s.chipsRow}>
-            {/* Category chip — pre-filled */}
             <div
               style={{
                 ...s.chip,
@@ -515,7 +888,6 @@ export default function PromptDesign() {
               {productType.category.name}
             </div>
 
-            {/* Colors chip */}
             <ChipDropdown
               icon="◕"
               label="Colors"
@@ -524,7 +896,6 @@ export default function PromptDesign() {
               onSelect={setSelectedColors}
             />
 
-            {/* Artist chip */}
             <ChipDropdown
               icon="✦"
               label="Artist"
@@ -533,7 +904,6 @@ export default function PromptDesign() {
               onSelect={setSelectedArtist}
             />
 
-            {/* Image chip */}
             <label
               style={{
                 ...s.chip,
@@ -554,19 +924,134 @@ export default function PromptDesign() {
             </label>
           </div>
 
-            {/* Generate button */}
-            <div style={s.footer}>
+          {/* Generate / Regenerate button */}
+          <div style={s.footer}>
+            <button
+              type="button"
+              onClick={hasResults ? handleRegenerate : handleGenerate}
+              disabled={!canGenerate}
+              style={{
+                ...s.generateButton,
+                ...(!canGenerate ? s.generateButtonDisabled : {}),
+              }}
+            >
+              <span style={{ fontSize: 16 }}>✦</span>
+              {isSubmitting
+                ? "Generating..."
+                : hasResults
+                  ? "Regenerate"
+                  : "Generate"}
+            </button>
+          </div>
+        </div>
+
+        {/* Loading state */}
+        {isSubmitting && (
+          <div style={s.loadingCard}>
+            <div style={s.spinner} />
+            <p style={s.loadingText}>
+              Generating your {productType.name.toLowerCase()} design…
+            </p>
+            <p style={s.loadingSubtext}>
+              This usually takes 10–15 seconds
+            </p>
+          </div>
+        )}
+
+        {/* Generation failed — prompt was saved but no images came back */}
+        {generationFailed && (
+          <div style={s.errorCard}>
+            <p style={s.errorText}>
+              Design generation didn't return images this time. Your prompt has
+              been saved — try hitting <strong>Regenerate</strong> above.
+            </p>
+          </div>
+        )}
+
+        {/* ── Design results (inline PDP) ── */}
+        {hasResults && !isSubmitting && (
+          <div style={s.resultsSection}>
+            {/* Main image */}
+            <div style={s.mainImageContainer}>
+              <img
+                src={mainImage}
+                alt="Generated design"
+                style={s.mainImage}
+              />
+            </div>
+
+            {/* Thumbnail row */}
+            {generatedImages.length > 1 && (
+              <div style={s.thumbnailRow}>
+                {generatedImages.map((url, idx) => (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => setSelectedImageIdx(idx)}
+                    style={{
+                      ...s.thumbnail,
+                      ...(idx === selectedImageIdx
+                        ? s.thumbnailSelected
+                        : {}),
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Variation ${idx + 1}`}
+                      style={s.thumbnailImg}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ── Edit Design affordance ── */}
+            <div style={s.editCard}>
+              <div style={s.editRow}>
+                <input
+                  type="text"
+                  placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && canEdit) handleEdit();
+                  }}
+                  style={s.editInput}
+                />
+                <button
+                  type="button"
+                  onClick={handleEdit}
+                  disabled={!canEdit}
+                  style={{
+                    ...s.editButton,
+                    ...(!canEdit ? s.generateButtonDisabled : {}),
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>✦</span>
+                  Edit Design
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={s.resultsActions}>
               <button
                 type="button"
-                onClick={handleGenerate}
-                disabled={!canGenerate}
-                style={{
-                  ...s.generateButton,
-                  ...(!canGenerate ? s.generateButtonDisabled : {}),
-                }}
+                onClick={() =>
+                  navigate(`/app/design/${savedProductId}/pricing`)
+                }
+                style={s.generateButton}
               >
-                <span style={{ fontSize: 16 }}>✦</span>
-                {isSubmitting ? "Generating..." : "Generate"}
+                Continue to Pricing →
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(`/app/categories/${productType.category.slug}`)
+                }
+                style={s.secondaryButton}
+              >
+                Start Over
               </button>
             </div>
           </div>

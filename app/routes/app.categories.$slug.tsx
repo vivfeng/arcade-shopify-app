@@ -1,5 +1,4 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useNavigate } from "@remix-run/react";
+import { data, type LoaderFunctionArgs, useLoaderData, useNavigate } from "react-router";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -35,7 +34,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
     throw new Response("Category not found", { status: 404 });
   }
 
-  return json({ category });
+  return data({ category });
 };
 
 // First product type in each category gets a "Popular" badge

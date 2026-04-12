@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "@remix-run/node";
+import type { ActionFunctionArgs } from "react-router";
 import { Prisma } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";

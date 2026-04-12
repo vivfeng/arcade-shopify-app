@@ -1,5 +1,4 @@
-import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, useLoaderData } from "@remix-run/react";
+import { data, redirect, type LoaderFunctionArgs, Link, useLoaderData } from "react-router";
 import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -33,7 +32,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw redirect(`/app/design/${product.id}/pricing`);
   }
 
-  return json({
+  return data({
     product: {
       id: product.id,
       displayName: product.title ?? product.productType.name,

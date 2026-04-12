@@ -1,5 +1,4 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, useLoaderData, useNavigate } from "@remix-run/react";
+import { data, type LoaderFunctionArgs, Link, useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { colors, fonts, radius } from "../lib/tokens";
@@ -17,7 +16,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   });
 
-  return json({ categories });
+  return data({ categories });
 };
 
 const gridStyles: Record<string, React.CSSProperties> = {
