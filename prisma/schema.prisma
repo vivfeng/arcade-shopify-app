@@ -90,12 +90,15 @@ model ProductType {
 
 enum ProductStatus {
   DRAFT
+  PUBLISHING
   ACTIVE
 }
 
 model ArcadeProduct {
   id                String        @id @default(cuid())
   designPrompt      String?
+  arcadeDocumentId  String?       // Arcade backend document ID for Firestore polling
+  generationId      String?       // Opaque generation ID from Arcade API (used for edits/regenerate)
   imageUrls         Json          @default("[]") // AI-generated imagery URLs
   shopifyProductGid String?       // e.g. "gid://shopify/Product/12345"
   status            ProductStatus @default(DRAFT)
@@ -110,10 +113,17 @@ model ArcadeProduct {
   productTypeId String
   productType   ProductType @relation(fields: [productTypeId], references: [id])
 
+  // Self-referential: links to the parent generation this was derived from
+  // (via regenerate or iterative edit). Null for initial generations.
+  parentProductId String?
+  parentProduct   ArcadeProduct?  @relation("DesignHistory", fields: [parentProductId], references: [id])
+  childProducts   ArcadeProduct[] @relation("DesignHistory")
+
   variants ProductVariant[]
 
   @@index([shopId])
   @@index([productTypeId])
+  @@index([parentProductId])
 }
 
 model ProductVariant {

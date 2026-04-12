@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { data, Form, useActionData, useLoaderData } from "react-router";
 import {
   AppProvider as PolarisAppProvider,
   Button,
@@ -19,7 +18,7 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const errors = await login(request);
 
-  return json({
+  return data({
     errors,
     polarisTranslations: await import(
       "@shopify/polaris/locales/en.json"
@@ -30,7 +29,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const errors = await login(request);
 
-  return json({
+  return data({
     errors: {
       shop: errors?.shop ? loginErrorMessage(errors) : undefined,
     },

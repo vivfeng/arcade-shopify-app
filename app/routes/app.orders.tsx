@@ -1,12 +1,13 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import {
+  data,
+  type LoaderFunctionArgs,
   Form,
   Link,
   useLoaderData,
   useNavigate,
   useSearchParams,
   useSubmit,
-} from "@remix-run/react";
+} from "react-router";
 import { Fragment, useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { colors as tokens, fonts } from "../lib/tokens";
@@ -304,7 +305,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const start = (safePage - 1) * PAGE_SIZE;
   const pagedRows = rows.slice(start, start + PAGE_SIZE);
 
-  return json({
+  return data({
     rows: pagedRows,
     counts,
     pagination: {

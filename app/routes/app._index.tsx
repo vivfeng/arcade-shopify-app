@@ -1,10 +1,12 @@
 import {
-  json,
+  data,
   redirect,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
-} from "@remix-run/node";
-import { Form, useLoaderData, useNavigate } from "@remix-run/react";
+  Form,
+  useLoaderData,
+  useNavigate,
+} from "react-router";
 import {
   Page,
   Text,
@@ -25,7 +27,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     select: { onboardingComplete: true },
   });
 
-  return json({
+  return data({
     onboardingComplete: shop?.onboardingComplete ?? false,
   });
 };
