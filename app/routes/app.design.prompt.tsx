@@ -231,18 +231,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // Fallback: no generationId yet, do a fresh generate
         const genResponse = await requestDesignGeneration({
           prompt: promptValue,
-          generationType: parentProduct.productType.slug,
-          colors: colorsValue,
-          artistStyle: artistValue,
         });
-        arcadeDocumentId = genResponse.documentId;
-        generationId = genResponse.generationId ?? null;
-
-        const designDoc = await pollDesignDocument(genResponse.documentId);
-        generationId = designDoc.generationId ?? generationId;
-        imageUrls = extractImages(designDoc);
-        suggestedTitle = designDoc.suggestedTitle ?? null;
-        suggestedDescription = designDoc.suggestedDescription ?? null;
+        arcadeDocumentId = genResponse.firestoreDocumentId;
+        generationId = genResponse.dreamId ?? null;
+        // Images resolved client-side via Firestore subscription
       }
     } catch (err) {
       console.error("[AII-826] Arcade design regeneration failed:", err);
@@ -313,20 +305,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let suggestedDescription: string | null = null;
 
   try {
-    const generation = await requestDesignGeneration({
-      prompt,
-      generationType: productType.slug,
-      colors: colorsValue,
-      artistStyle: artistValue,
-    });
-    arcadeDocumentId = generation.documentId;
-    generationId = generation.generationId ?? null;
-
-    const designDoc = await pollDesignDocument(generation.documentId);
-    generationId = designDoc.generationId ?? generationId;
-    imageUrls = extractImages(designDoc);
-    suggestedTitle = designDoc.suggestedTitle ?? null;
-    suggestedDescription = designDoc.suggestedDescription ?? null;
+    const generation = await requestDesignGeneration({ prompt });
+    arcadeDocumentId = generation.firestoreDocumentId;
+    generationId = generation.dreamId ?? null;
+    // Images are resolved client-side via Firestore subscription
+    // (useDesignGeneration hook). The action returns the document ID
+    // for the client to monitor.
   } catch (err) {
     console.error("[AII-826] Arcade design generation failed:", err);
     // Still create the draft so the merchant's prompt isn't lost.
