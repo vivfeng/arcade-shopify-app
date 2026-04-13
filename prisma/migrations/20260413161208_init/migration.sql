@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "ProductStatus" AS ENUM ('DRAFT', 'ACTIVE');
+CREATE TYPE "ProductStatus" AS ENUM ('DRAFT', 'PUBLISHING', 'ACTIVE');
 
 -- CreateEnum
 CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'REFUNDED');
@@ -39,6 +39,7 @@ CREATE TABLE "Shop" (
     "email" TEXT,
     "name" TEXT,
     "installedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "onboardingComplete" BOOLEAN NOT NULL DEFAULT false,
     "uninstalledAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -82,6 +83,9 @@ CREATE TABLE "ProductType" (
 CREATE TABLE "ArcadeProduct" (
     "id" TEXT NOT NULL,
     "designPrompt" TEXT,
+    "arcadeDocumentId" TEXT,
+    "generationId" TEXT,
+    "designVariantId" TEXT,
     "imageUrls" JSONB NOT NULL DEFAULT '[]',
     "shopifyProductGid" TEXT,
     "status" "ProductStatus" NOT NULL DEFAULT 'DRAFT',
@@ -91,6 +95,7 @@ CREATE TABLE "ArcadeProduct" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "shopId" TEXT NOT NULL,
     "productTypeId" TEXT NOT NULL,
+    "parentProductId" TEXT,
 
     CONSTRAINT "ArcadeProduct_pkey" PRIMARY KEY ("id")
 );
@@ -165,6 +170,9 @@ CREATE INDEX "ArcadeProduct_shopId_idx" ON "ArcadeProduct"("shopId");
 CREATE INDEX "ArcadeProduct_productTypeId_idx" ON "ArcadeProduct"("productTypeId");
 
 -- CreateIndex
+CREATE INDEX "ArcadeProduct_parentProductId_idx" ON "ArcadeProduct"("parentProductId");
+
+-- CreateIndex
 CREATE INDEX "ProductVariant_arcadeProductId_idx" ON "ProductVariant"("arcadeProductId");
 
 -- CreateIndex
@@ -184,6 +192,9 @@ ALTER TABLE "ArcadeProduct" ADD CONSTRAINT "ArcadeProduct_shopId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "ArcadeProduct" ADD CONSTRAINT "ArcadeProduct_productTypeId_fkey" FOREIGN KEY ("productTypeId") REFERENCES "ProductType"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ArcadeProduct" ADD CONSTRAINT "ArcadeProduct_parentProductId_fkey" FOREIGN KEY ("parentProductId") REFERENCES "ArcadeProduct"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_arcadeProductId_fkey" FOREIGN KEY ("arcadeProductId") REFERENCES "ArcadeProduct"("id") ON DELETE CASCADE ON UPDATE CASCADE;

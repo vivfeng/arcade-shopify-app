@@ -3,6 +3,8 @@ import { data, Link, Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { NavMenu } from "@shopify/app-bridge-react";
+import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
+import enTranslations from "@shopify/polaris/locales/en.json";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -46,22 +48,16 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      {/*
-        NavMenu must use the framework's client-side <Link>, not raw
-        <a> tags. Inside the Shopify admin iframe, anchor navigation
-        drops the session token on the URL and causes a top-frame
-        reload — the embedded app then loses its session and re-auths.
-        See review finding #6 and ADR 0001 policy rule 3 (this is a
-        surgical fix on an existing Remix file, no new Remix imports).
-      */}
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Home
-        </Link>
-        <Link to="/app/categories">Create Product</Link>
-        <Link to="/app/orders">Orders</Link>
-      </NavMenu>
-      <Outlet />
+      <PolarisAppProvider i18n={enTranslations}>
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Home
+          </Link>
+          <Link to="/app/categories">Create Product</Link>
+          <Link to="/app/orders">Orders</Link>
+        </NavMenu>
+        <Outlet />
+      </PolarisAppProvider>
     </AppProvider>
   );
 }
