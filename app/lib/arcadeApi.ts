@@ -77,7 +77,7 @@ async function arcadeFetch(
     headers: {
       "Content-Type": "application/json",
       ...(ARCADE_API_KEY
-        ? { Authorization: `Bearer ${ARCADE_API_KEY}` }
+        ? { "X-Vercel-Authorization": ARCADE_API_KEY }
         : {}),
       ...options.headers,
     },
