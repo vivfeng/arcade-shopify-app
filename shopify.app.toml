@@ -1,0 +1,56 @@
+# Shopify app configuration — DEVELOPMENT default.
+#
+# The production config lives in `shopify.app.arcadeai.toml` and is
+# selected via `shopify app config use arcadeai`. The api_version below
+# MUST match the runtime pin in `app/shopify.server.ts` and the prod
+# config in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4 in
+# `docs/adr/0001-remix-to-react-router.md` — version bumps touch all
+# three files in a single commit.
+#
+# client_id will be set after `shopify app config link`
+
+[access_scopes]
+scopes = "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments"
+
+[auth]
+redirect_urls = [ "https://localhost/auth/callback" ]
+
+[webhooks]
+# Must match `ApiVersion.January26` in `app/shopify.server.ts` and the
+# `api_version` in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4.
+api_version = "2026-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes-update"
+
+  # GDPR compliance webhooks. Use `compliance_topics` only — the
+  # Shopify CLI delivers these via a separate signed channel and a
+  # subscription cannot mix `topics` and `compliance_topics` for the
+  # same event. Must stay byte-for-byte aligned with the prod config
+  # in `shopify.app.arcadeai.toml`. See ADR 0001 blocker B4.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data-request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[app_proxy]
+  subpath_prefix = ""
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = ""
