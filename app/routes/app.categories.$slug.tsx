@@ -34,7 +34,17 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
     throw new Response("Category not found", { status: 404 });
   }
 
-  return data({ category });
+  // Convert Prisma Decimals to numbers — turbo-stream serialization
+  // (used by React Router's data()) doesn't preserve Decimal objects.
+  const serialized = {
+    ...category,
+    productTypes: category.productTypes.map((pt) => ({
+      ...pt,
+      basePrice: Number(pt.basePrice),
+    })),
+  };
+
+  return data({ category: serialized });
 };
 
 // First product type in each category gets a "Popular" badge

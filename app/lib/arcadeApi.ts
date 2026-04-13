@@ -8,7 +8,7 @@
 //   4. Firestore doc contains results_map -> design_variants -> image URLs.
 //   5. For fresh data after DB changes, use POST /public/batch/design-variants.
 //
-// Auth: X-Vercel-Authorization header with API key.
+// Auth: Authorization Bearer header with API key.
 // Pointed at staging only.
 
 const ARCADE_API_URL =
@@ -77,7 +77,7 @@ async function arcadeFetch(
     headers: {
       "Content-Type": "application/json",
       ...(ARCADE_API_KEY
-        ? { "X-Vercel-Authorization": ARCADE_API_KEY }
+        ? { Authorization: `Bearer ${ARCADE_API_KEY}` }
         : {}),
       ...options.headers,
     },

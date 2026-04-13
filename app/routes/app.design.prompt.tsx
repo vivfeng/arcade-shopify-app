@@ -3,13 +3,9 @@ import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
-import {
-  requestDesignGeneration,
-  pollDesignDocument,
-  requestDesignRegenerate,
-  requestDesignEdit,
-} from "../lib/arcadeApi";
-import { useState, useCallback } from "react";
+import { requestDesignGeneration } from "../lib/arcadeApi";
+import { useState, useCallback, useEffect } from "react";
+import { useDesignGeneration } from "../hooks/useDesignGeneration";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -56,214 +52,174 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "Shop not found for authenticated session" }, { status: 400 });
   }
 
-  // ── Shared helpers ──
-
-  /** Normalize an Arcade design document into a flat image list. */
-  function extractImages(designDoc: {
-    imageUrls?: string[];
-    patternUrl?: string;
-    makerImageUrl?: string;
-  }): string[] {
-    const urls = [...(designDoc.imageUrls ?? [])];
-    if (designDoc.patternUrl && !urls.includes(designDoc.patternUrl)) {
-      urls.unshift(designDoc.patternUrl);
-    }
-    if (designDoc.makerImageUrl && !urls.includes(designDoc.makerImageUrl)) {
-      urls.push(designDoc.makerImageUrl);
-    }
-    return urls;
-  }
-
   // ═══════════════════════════════════════════════════════════════════
   // INTENT: edit — iterative descriptive edit on an existing design
   // ═══════════════════════════════════════════════════════════════════
-  if (intent === "edit") {
-    const parentProductId = formData.get("parentProductId") as string;
-    const editInstruction = formData.get("editInstruction") as string;
+  // if (intent === "edit") {
+  //   const parentProductId = formData.get("parentProductId") as string;
+  //   const editInstruction = formData.get("editInstruction") as string;
 
-    if (!parentProductId || !editInstruction) {
-      return data(
-        { error: "Parent product ID and edit instruction are required" },
-        { status: 400 },
-      );
-    }
+  //   if (!parentProductId || !editInstruction) {
+  //     return data(
+  //       { error: "Parent product ID and edit instruction are required" },
+  //       { status: 400 },
+  //     );
+  //   }
 
-    // Load the parent product to get the generationId + context
-    const parentProduct = await db.arcadeProduct.findUnique({
-      where: { id: parentProductId },
-      select: {
-        id: true,
-        generationId: true,
-        arcadeDocumentId: true,
-        designPrompt: true,
-        productTypeId: true,
-        shopId: true,
-      },
-    });
+  //   const parentProduct = await db.arcadeProduct.findUnique({
+  //     where: { id: parentProductId },
+  //     select: {
+  //       id: true,
+  //       // designVariantId: true,
+  //       designPrompt: true,
+  //       productTypeId: true,
+  //       shopId: true,
+  //     },
+  //   });
 
-    if (!parentProduct) {
-      return data({ error: "Parent product not found" }, { status: 404 });
-    }
+  //   if (!parentProduct) {
+  //     return data({ error: "Parent product not found" }, { status: 404 });
+  //   }
 
-    // The generationId is the key for chaining edits. Fall back to
-    // arcadeDocumentId if the generation predates the generationId field.
-    const sourceGenerationId =
-      parentProduct.generationId ?? parentProduct.arcadeDocumentId;
+  //   // if (!parentProduct.designVariantId) {
+  //   //   return data(
+  //   //     { error: "Parent product has no design variant ID — cannot edit" },
+  //   //     { status: 400 },
+  //   //   );
+  //   // }
 
-    if (!sourceGenerationId) {
-      return data(
-        { error: "Parent product has no generation ID — cannot edit" },
-        { status: 400 },
-      );
-    }
+  //   let arcadeDocumentId: string | null = null;
+  //   let generationId: string | null = null;
+  //   let designVariantId: string | null = null;
+  //   let imageUrls: string[] = [];
+  //   let suggestedTitle: string | null = null;
+  //   let suggestedDescription: string | null = null;
 
-    let arcadeDocumentId: string | null = null;
-    let generationId: string | null = null;
-    let imageUrls: string[] = [];
-    let suggestedTitle: string | null = null;
-    let suggestedDescription: string | null = null;
+  //   try {
+  //     const editResponse = await requestDesignEdit({
+  //       designVariantId: parentProduct.designVariantId,
+  //       prompt: editInstruction,
+  //     });
+  //     arcadeDocumentId = editResponse.firestoreDocumentId;
 
-    try {
-      const editResponse = await requestDesignEdit({
-        generationId: sourceGenerationId,
-        editInstruction,
-        shopId: shop.id,
-      });
-      arcadeDocumentId = editResponse.documentId;
+  //     const designDoc = await pollDesignDocument(
+  //       editResponse.firestoreDocumentId,
+  //       editResponse.dreamId,
+  //     );
+  //     generationId = designDoc.dreamId ?? null;
+  //     designVariantId = designDoc.designVariantId ?? null;
+  //     imageUrls = extractImages(designDoc);
+  //     suggestedTitle = designDoc.suggestedTitle ?? null;
+  //     suggestedDescription = designDoc.suggestedDescription ?? null;
+  //   } catch (err) {
+  //     console.error("[AII-826] Arcade design edit failed:", err);
+  //   }
 
-      const designDoc = await pollDesignDocument(editResponse.documentId);
-      generationId = designDoc.generationId ?? null;
-      imageUrls = extractImages(designDoc);
-      suggestedTitle = designDoc.suggestedTitle ?? null;
-      suggestedDescription = designDoc.suggestedDescription ?? null;
-    } catch (err) {
-      console.error("[AII-826] Arcade design edit failed:", err);
-    }
+  //   const product = await db.arcadeProduct.create({
+  //     data: {
+  //       designPrompt: parentProduct.designPrompt,
+  //       arcadeDocumentId,
+  //       generationId,
+  //       designVariantId,
+  //       imageUrls: imageUrls.length > 0 ? imageUrls : [],
+  //       shopId: parentProduct.shopId,
+  //       productTypeId: parentProduct.productTypeId,
+  //       parentProductId: parentProduct.id,
+  //       status: "DRAFT",
+  //       title: suggestedTitle,
+  //       description: suggestedDescription,
+  //     },
+  //   });
 
-    // Create a new ArcadeProduct row linked to the parent
-    const product = await db.arcadeProduct.create({
-      data: {
-        designPrompt: parentProduct.designPrompt,
-        arcadeDocumentId,
-        generationId,
-        imageUrls: imageUrls.length > 0 ? imageUrls : [],
-        shopId: parentProduct.shopId,
-        productTypeId: parentProduct.productTypeId,
-        parentProductId: parentProduct.id,
-        status: "DRAFT",
-        title: suggestedTitle,
-        description: suggestedDescription,
-      },
-    });
+  //   return data({
+  //     productId: product.id,
+  //     imageUrls,
+  //     arcadeDocumentId,
+  //     generationId,
+  //     parentProductId: parentProduct.id,
+  //   });
+  // }
 
-    return data({
-      productId: product.id,
-      imageUrls,
-      arcadeDocumentId,
-      generationId,
-      parentProductId: parentProduct.id,
-    });
-  }
+  // // ═══════════════════════════════════════════════════════════════════
+  // // INTENT: regenerate — same prompt, fresh variations
+  // // ═══════════════════════════════════════════════════════════════════
+  // if (intent === "regenerate") {
+  //   const parentProductId = formData.get("parentProductId") as string;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // INTENT: regenerate — same prompt, fresh variations
-  // ═══════════════════════════════════════════════════════════════════
-  if (intent === "regenerate") {
-    const parentProductId = formData.get("parentProductId") as string;
+  //   if (!parentProductId) {
+  //     return data(
+  //       { error: "Parent product ID is required for regenerate" },
+  //       { status: 400 },
+  //     );
+  //   }
 
-    if (!parentProductId) {
-      return data(
-        { error: "Parent product ID is required for regenerate" },
-        { status: 400 },
-      );
-    }
+  //   const parentProduct = await db.arcadeProduct.findUnique({
+  //     where: { id: parentProductId },
+  //     select: {
+  //       id: true,
+  //       designPrompt: true,
+  //       productTypeId: true,
+  //       shopId: true,
+  //     },
+  //   });
 
-    const parentProduct = await db.arcadeProduct.findUnique({
-      where: { id: parentProductId },
-      select: {
-        id: true,
-        generationId: true,
-        arcadeDocumentId: true,
-        designPrompt: true,
-        productTypeId: true,
-        shopId: true,
-        productType: { select: { slug: true } },
-      },
-    });
+  //   if (!parentProduct) {
+  //     return data({ error: "Parent product not found" }, { status: 404 });
+  //   }
 
-    if (!parentProduct) {
-      return data({ error: "Parent product not found" }, { status: 404 });
-    }
+  //   const promptValue =
+  //     (formData.get("prompt") as string) || parentProduct.designPrompt || "";
 
-    const sourceGenerationId =
-      parentProduct.generationId ?? parentProduct.arcadeDocumentId;
+  //   let arcadeDocumentId: string | null = null;
+  //   let generationId: string | null = null;
+  //   let designVariantId: string | null = null;
+  //   let imageUrls: string[] = [];
+  //   let suggestedTitle: string | null = null;
+  //   let suggestedDescription: string | null = null;
 
-    // Collect optional structured inputs (may have changed between generations)
-    const colorsValue = (formData.get("colors") as string) || undefined;
-    const artistValue = (formData.get("artist") as string) || undefined;
-    const promptValue =
-      (formData.get("prompt") as string) || parentProduct.designPrompt || "";
+  //   try {
+  //     // Regeneration = fresh generate call with the same prompt (no separate endpoint)
+  //     const generation = await requestDesignGeneration({ prompt: promptValue });
+  //     arcadeDocumentId = generation.firestoreDocumentId;
+  //     generationId = generation.dreamId ?? null;
 
-    let arcadeDocumentId: string | null = null;
-    let generationId: string | null = null;
-    let imageUrls: string[] = [];
-    let suggestedTitle: string | null = null;
-    let suggestedDescription: string | null = null;
+  //     const designDoc = await pollDesignDocument(
+  //       generation.firestoreDocumentId,
+  //       generation.dreamId,
+  //     );
+  //     generationId = designDoc.dreamId ?? generationId;
+  //     designVariantId = designDoc.designVariantId ?? null;
+  //     imageUrls = extractImages(designDoc);
+  //     suggestedTitle = designDoc.suggestedTitle ?? null;
+  //     suggestedDescription = designDoc.suggestedDescription ?? null;
+  //   } catch (err) {
+  //     console.error("[AII-826] Arcade design regeneration failed:", err);
+  //   }
 
-    try {
-      if (sourceGenerationId) {
-        // Use regenerate endpoint if we have a generationId
-        const regenResponse = await requestDesignRegenerate({
-          generationId: sourceGenerationId,
-          prompt: promptValue,
-          generationType: parentProduct.productType.slug,
-          colors: colorsValue,
-          artistStyle: artistValue,
-        });
-        arcadeDocumentId = regenResponse.documentId;
+  //   const product = await db.arcadeProduct.create({
+  //     data: {
+  //       designPrompt: promptValue,
+  //       arcadeDocumentId,
+  //       generationId,
+  //       designVariantId,
+  //       imageUrls: imageUrls.length > 0 ? imageUrls : [],
+  //       shopId: parentProduct.shopId,
+  //       productTypeId: parentProduct.productTypeId,
+  //       parentProductId: parentProduct.id,
+  //       status: "DRAFT",
+  //       title: suggestedTitle,
+  //       description: suggestedDescription,
+  //     },
+  //   });
 
-        const designDoc = await pollDesignDocument(regenResponse.documentId);
-        generationId = designDoc.generationId ?? null;
-        imageUrls = extractImages(designDoc);
-        suggestedTitle = designDoc.suggestedTitle ?? null;
-        suggestedDescription = designDoc.suggestedDescription ?? null;
-      } else {
-        // Fallback: no generationId yet, do a fresh generate
-        const genResponse = await requestDesignGeneration({
-          prompt: promptValue,
-        });
-        arcadeDocumentId = genResponse.firestoreDocumentId;
-        generationId = genResponse.dreamId ?? null;
-        // Images resolved client-side via Firestore subscription
-      }
-    } catch (err) {
-      console.error("[AII-826] Arcade design regeneration failed:", err);
-    }
-
-    // Create a new ArcadeProduct linked to the parent
-    const product = await db.arcadeProduct.create({
-      data: {
-        designPrompt: promptValue,
-        arcadeDocumentId,
-        generationId,
-        imageUrls: imageUrls.length > 0 ? imageUrls : [],
-        shopId: parentProduct.shopId,
-        productTypeId: parentProduct.productTypeId,
-        parentProductId: parentProduct.id,
-        status: "DRAFT",
-        title: suggestedTitle,
-        description: suggestedDescription,
-      },
-    });
-
-    return data({
-      productId: product.id,
-      imageUrls,
-      arcadeDocumentId,
-      generationId,
-      parentProductId: parentProduct.id,
-    });
-  }
+  //   return data({
+  //     productId: product.id,
+  //     imageUrls,
+  //     arcadeDocumentId,
+  //     generationId,
+  //     parentProductId: parentProduct.id,
+  //   });
+  // }
 
   // ═══════════════════════════════════════════════════════════════════
   // INTENT: generate (default) — initial design from prompt
@@ -291,26 +247,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // AII-826: Call the Arcade staging backend design-from-prompt async API.
-  //
-  // Flow: POST to /design/generate → receive a documentId immediately →
-  // poll the Firestore-backed document until it populates with images.
-  //
-  // ⚠️  Currently pointed at staging backend (https://api.staging.arcade.ai).
-  // See: https://api.staging.arcade.ai/swagger/
+  // POST /api/design-from-prompt-async → poll GET /api/dreams/{dreamId}.
+  // ⚠️  Currently pointed at staging (https://api.staging.arcade.ai).
 
   let arcadeDocumentId: string | null = null;
   let generationId: string | null = null;
-  let imageUrls: string[] = [];
-  let suggestedTitle: string | null = null;
-  let suggestedDescription: string | null = null;
 
   try {
     const generation = await requestDesignGeneration({ prompt });
+    console.log("[AII-826] Arcade generation response:", generation);
     arcadeDocumentId = generation.firestoreDocumentId;
     generationId = generation.dreamId ?? null;
-    // Images are resolved client-side via Firestore subscription
-    // (useDesignGeneration hook). The action returns the document ID
-    // for the client to monitor.
   } catch (err) {
     console.error("[AII-826] Arcade design generation failed:", err);
     // Still create the draft so the merchant's prompt isn't lost.
@@ -321,18 +268,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       designPrompt: prompt,
       arcadeDocumentId,
       generationId,
-      imageUrls: imageUrls.length > 0 ? imageUrls : [],
+      imageUrls: [],
       shopId: shop.id,
       productTypeId,
       status: "DRAFT",
-      title: suggestedTitle,
-      description: suggestedDescription,
     },
   });
 
   return data({
     productId: product.id,
-    imageUrls,
     arcadeDocumentId,
     generationId,
   });
@@ -728,10 +672,8 @@ export default function PromptDesign() {
   const navigate = useNavigate();
   const fetcher = useFetcher<{
     productId?: string;
-    imageUrls?: string[];
     arcadeDocumentId?: string;
     generationId?: string;
-    parentProductId?: string;
     error?: string;
   }>();
 
@@ -742,21 +684,29 @@ export default function PromptDesign() {
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [editInstruction, setEditInstruction] = useState("");
 
-  const isSubmitting = fetcher.state !== "idle";
-  const canGenerate = prompt.trim().length > 0 && !isSubmitting;
+  // Track the Firestore doc ID for real-time monitoring
+  const [firestoreDocId, setFirestoreDocId] = useState<string | null>(null);
+  const design = useDesignGeneration(firestoreDocId);
 
-  // Results from the Arcade staging backend
-  const generatedImages =
-    fetcher.data && "imageUrls" in fetcher.data
-      ? (fetcher.data.imageUrls ?? [])
-      : [];
-  const savedProductId =
-    fetcher.data && "productId" in fetcher.data
-      ? fetcher.data.productId
-      : null;
+  // When fetcher returns arcadeDocumentId, start Firestore monitoring
+  useEffect(() => {
+    if (fetcher.data?.arcadeDocumentId) {
+      setFirestoreDocId(fetcher.data.arcadeDocumentId);
+    }
+  }, [fetcher.data?.arcadeDocumentId]);
+
+  const isSubmitting = fetcher.state !== "idle";
+  const isMonitoring = design.status === "monitoring";
+  const isLoading = isSubmitting || isMonitoring;
+  const canGenerate = prompt.trim().length > 0 && !isLoading;
+
+  // Images come from the Firestore real-time hook
+  const generatedImages = design.imageUrls;
+  const savedProductId = fetcher.data?.productId ?? null;
   const hasResults = generatedImages.length > 0;
   const generationFailed =
-    savedProductId != null && !hasResults && fetcher.state === "idle";
+    design.status === "failed" ||
+    (savedProductId != null && !hasResults && !isLoading && firestoreDocId != null);
   const mainImage = generatedImages[selectedImageIdx] ?? generatedImages[0];
 
   // ── Generate (initial) ──
@@ -769,6 +719,8 @@ export default function PromptDesign() {
 
     setSelectedImageIdx(0);
     setEditInstruction("");
+    setFirestoreDocId(null);
+    design.reset();
 
     fetcher.submit(
       {
@@ -784,7 +736,7 @@ export default function PromptDesign() {
 
   // ── Regenerate (same prompt, fresh variations) ──
   const handleRegenerate = useCallback(() => {
-    if (!savedProductId || isSubmitting) return;
+    if (!savedProductId || isLoading) return;
 
     let fullPrompt = prompt.trim();
     if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
@@ -792,6 +744,8 @@ export default function PromptDesign() {
 
     setSelectedImageIdx(0);
     setEditInstruction("");
+    setFirestoreDocId(null);
+    design.reset();
 
     fetcher.submit(
       {
@@ -807,7 +761,7 @@ export default function PromptDesign() {
 
   // ── Iterative edit ──
   const canEdit =
-    editInstruction.trim().length > 0 && savedProductId != null && !isSubmitting;
+    editInstruction.trim().length > 0 && savedProductId != null && !isLoading;
 
   const handleEdit = useCallback(() => {
     if (!canEdit || !savedProductId) return;
@@ -920,7 +874,7 @@ export default function PromptDesign() {
               }}
             >
               <span style={{ fontSize: 16 }}>✦</span>
-              {isSubmitting
+              {isLoading
                 ? "Generating..."
                 : hasResults
                   ? "Regenerate"
@@ -930,7 +884,7 @@ export default function PromptDesign() {
         </div>
 
         {/* Loading state */}
-        {isSubmitting && (
+        {isLoading && (
           <div style={s.loadingCard}>
             <div style={s.spinner} />
             <p style={s.loadingText}>
@@ -946,14 +900,15 @@ export default function PromptDesign() {
         {generationFailed && (
           <div style={s.errorCard}>
             <p style={s.errorText}>
-              Design generation didn't return images this time. Your prompt has
-              been saved — try hitting <strong>Regenerate</strong> above.
+              {design.error
+                ? `Design generation failed: ${design.error}`
+                : "Design generation didn't return images this time. Your prompt has been saved — try hitting Regenerate above."}
             </p>
           </div>
         )}
 
         {/* ── Design results (inline PDP) ── */}
-        {hasResults && !isSubmitting && (
+        {hasResults && !isLoading && (
           <div style={s.resultsSection}>
             {/* Main image */}
             <div style={s.mainImageContainer}>
