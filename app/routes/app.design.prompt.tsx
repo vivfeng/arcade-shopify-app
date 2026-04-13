@@ -334,6 +334,7 @@ function ChipDropdown({
             <button
               key={opt}
               type="button"
+              className="arcade-chip-dropdown-item"
               style={{
                 ...s.dropdownItem,
                 fontWeight: opt === value ? 600 : 400,
@@ -342,13 +343,6 @@ function ChipDropdown({
               onClick={() => {
                 onSelect(opt);
                 setOpen(false);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = colors.pageBg;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background =
-                  opt === value ? colors.pageBg : "transparent";
               }}
             >
               {opt}
@@ -394,7 +388,6 @@ export default function PromptDesign() {
   const [prompt, setPrompt] = useState("");
   const [selectedColors, setSelectedColors] = useState<string | null>(null);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
-  const [referenceImage, setReferenceImage] = useState<File | null>(null);
 
   const isSubmitting = fetcher.state !== "idle";
   const canGenerate = prompt.trim().length > 0 && !isSubmitting;
@@ -431,6 +424,10 @@ export default function PromptDesign() {
 
   return (
     <Page>
+      {/* Hover styling for ChipDropdown items. Lives inline here rather
+          than inside ChipDropdown so it only renders once per screen
+          instead of once per chip instance. */}
+      <style>{`.arcade-chip-dropdown-item:hover{background:${colors.pageBg};}`}</style>
       <div style={s.container}>
         {/* Back link */}
         <button
@@ -532,26 +529,6 @@ export default function PromptDesign() {
               options={ARTIST_STYLES}
               onSelect={setSelectedArtist}
             />
-
-            {/* Image chip */}
-            <label
-              style={{
-                ...s.chip,
-                ...(referenceImage ? s.chipActive : {}),
-              }}
-            >
-              <span style={s.chipIcon}>◩</span>
-              {referenceImage ? referenceImage.name : "Image"}
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  setReferenceImage(file);
-                }}
-              />
-            </label>
           </div>
 
             {/* Generate button */}
