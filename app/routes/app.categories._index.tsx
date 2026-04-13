@@ -3,6 +3,7 @@ import { Link, useLoaderData, useNavigate } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { colors, fonts, radius } from "../lib/tokens";
+import { routes } from "../lib/routes";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -94,7 +95,7 @@ export default function CategoriesIndex() {
 
   return (
     <div style={gridStyles.page}>
-      <Link to="/app" style={{ textDecoration: "none" }}>
+      <Link to={routes.home} style={{ textDecoration: "none" }}>
         <h1 style={gridStyles.title}>Arcade</h1>
       </Link>
       <p style={gridStyles.subtitle}>
@@ -106,7 +107,7 @@ export default function CategoriesIndex() {
           <button
             key={cat.id}
             type="button"
-            onClick={() => navigate(`/app/categories/${cat.slug}`)}
+            onClick={() => navigate(routes.categoryDetail(cat.slug))}
             style={gridStyles.card}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = colors.cardBorderHover;

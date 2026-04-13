@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { formatPrice } from "../lib/format";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
+import { routes } from "../lib/routes";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -152,7 +153,7 @@ export default function CategoryProductTypes() {
         {/* Back link */}
         <button
           type="button"
-          onClick={() => navigate("/app/categories")}
+          onClick={() => navigate(routes.categories)}
           style={{
             background: "none",
             border: "none",
@@ -225,7 +226,7 @@ export default function CategoryProductTypes() {
               </span>
               <button
                 type="button"
-                onClick={() => navigate(`/app/design/prompt?type=${pt.slug}`)}
+                onClick={() => navigate(routes.designPrompt(pt.slug))}
                 style={rowStyles.designButton}
               >
                 Design

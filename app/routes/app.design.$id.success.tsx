@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { gidToNumericId } from "../lib/format";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
+import { routes } from "../lib/routes";
 
 // ─── Loader ───
 
@@ -30,7 +31,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   // published. Anything else gets bounced back to pricing/review so the
   // "Product Published!" copy is always truthful.
   if (product.status !== "ACTIVE") {
-    throw redirect(`/app/design/${product.id}/pricing`);
+    throw redirect(routes.designPricing(product.id));
   }
 
   return json({
@@ -171,7 +172,7 @@ export function PublishSuccessCard({
           </a>
         ) : (
           <Link
-            to="/app/categories"
+            to={routes.categories}
             style={s.primaryCta}
             data-testid="primary-cta-fallback"
           >
@@ -181,7 +182,7 @@ export function PublishSuccessCard({
 
         {/* Secondary CTA: always to categories */}
         <Link
-          to="/app/categories"
+          to={routes.categories}
           style={s.secondaryCta}
           data-testid="secondary-cta"
         >
