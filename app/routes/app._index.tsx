@@ -16,6 +16,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { routes } from "../lib/routes";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -38,7 +39,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     data: { onboardingComplete: true },
   });
 
-  return redirect("/app/categories");
+  return redirect(routes.categories);
 };
 
 const STEPS = [
@@ -133,7 +134,7 @@ export default function Home() {
               <Button
                 variant="primary"
                 size="large"
-                onClick={() => navigate("/app/categories")}
+                onClick={() => navigate(routes.categories)}
               >
                 Browse Categories
               </Button>

@@ -7,6 +7,7 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { routes } from "../lib/routes";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -56,11 +57,11 @@ export default function App() {
         surgical fix on an existing Remix file, no new Remix imports).
       */}
       <NavMenu>
-        <Link to="/app" rel="home">
+        <Link to={routes.home} rel="home">
           Home
         </Link>
-        <Link to="/app/categories">Create Product</Link>
-        <Link to="/app/orders">Orders</Link>
+        <Link to={routes.categories}>Create Product</Link>
+        <Link to={routes.orders}>Orders</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

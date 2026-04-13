@@ -10,6 +10,7 @@ import {
 import { Fragment, useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { colors as tokens, fonts } from "../lib/tokens";
+import { routes } from "../lib/routes";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -834,7 +835,7 @@ export default function OrdersDashboard() {
           <button type="button" style={styles.exportBtn} onClick={handleExport}>
             Export
           </button>
-          <Link to="/app/categories" style={{ textDecoration: "none" }}>
+          <Link to={routes.categories} style={{ textDecoration: "none" }}>
             <button type="button" style={styles.createBtn}>
               <span aria-hidden>✦</span>
               <span>Create order</span>

@@ -14,6 +14,7 @@ import db from "../db.server";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
 import { formatPrice } from "../lib/format";
 import { publishToShopify } from "../lib/shopifyPublish.server";
+import { routes } from "../lib/routes";
 import { useState, useCallback } from "react";
 
 // ─── Loader ───
@@ -59,7 +60,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   // Already published — go to success
   if (product.status === "ACTIVE") {
-    throw redirect(`/app/design/${product.id}/success`);
+    throw redirect(routes.designSuccess(product.id));
   }
 
   // Seed default variants if none exist yet
@@ -210,7 +211,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     // Already published
     if (product.shopifyProductGid) {
-      return redirect(`/app/design/${product.id}/success`);
+      return redirect(routes.designSuccess(product.id));
     }
 
     // Prevent double-submit
@@ -260,7 +261,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         },
       });
 
-      return redirect(`/app/design/${product.id}/success`);
+      return redirect(routes.designSuccess(product.id));
     } catch (err) {
       console.error("[BE-1681] Shopify publish failed:", err);
 
@@ -545,7 +546,7 @@ export default function PricingReview() {
         {/* Back link */}
         <button
           type="button"
-          onClick={() => navigate(`/app/design/${product.id}/pricing`)}
+          onClick={() => navigate(routes.designPricing(product.id))}
           style={s.backButton}
           // Navigate back to prompt (product's design page)
           // For now back goes to categories
@@ -663,7 +664,7 @@ export default function PricingReview() {
         {/* Actions */}
         <div style={s.footer}>
           <Link
-            to={`/app/categories`}
+            to={routes.categories}
             style={s.secondaryButton}
           >
             Cancel

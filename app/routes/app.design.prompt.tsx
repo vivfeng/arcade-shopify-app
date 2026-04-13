@@ -4,6 +4,7 @@ import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { colors, fonts, radius, shadows } from "../lib/tokens";
+import { routes } from "../lib/routes";
 import { useState, useCallback } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -433,7 +434,7 @@ export default function PromptDesign() {
         <button
           type="button"
           onClick={() =>
-            navigate(`/app/categories/${productType.category.slug}`)
+            navigate(routes.categoryDetail(productType.category.slug))
           }
           style={s.backButton}
         >
@@ -469,7 +470,7 @@ export default function PromptDesign() {
               <button
                 type="button"
                 onClick={() =>
-                  navigate(`/app/categories/${productType.category.slug}`)
+                  navigate(routes.categoryDetail(productType.category.slug))
                 }
                 style={s.successPrimary}
               >
@@ -477,7 +478,7 @@ export default function PromptDesign() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/app/categories")}
+                onClick={() => navigate(routes.categories)}
                 style={s.successSecondary}
               >
                 Browse categories
