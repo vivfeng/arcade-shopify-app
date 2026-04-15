@@ -1,45 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "../lib/firebase";
-
-export interface DesignVariantImage {
-  id?: string;
-  url: string;
-  modified_prompt: string;
-  ai_model: {
-    id: string;
-    artist?: {
-      display_name: string;
-      id: string;
-      name: string;
-    };
-  };
-}
-
-export interface DesignVariant {
-  design_variant_image: DesignVariantImage;
-}
-
-export interface Design {
-  design_variants: DesignVariant[];
-}
+import { getDb } from "../services/firebase/firebase";
+import type {
+  FirestoreDesign,
+  FirestoreDesignVariant,
+} from "../types/arcade";
 
 interface DesignGenerationState {
   status: "idle" | "monitoring" | "complete" | "failed";
-  /** Flat list of image URLs from all design variants. */
   imageUrls: string[];
-  /** Full variant data if needed. */
-  variants: DesignVariant[];
+  variants: FirestoreDesignVariant[];
   error?: string;
 }
 
-/**
- * Subscribes to a Firestore document in the "designsFromPrompt" collection
- * and extracts image URLs from results_map -> design_variants -> design_variant_image.url.
- *
- * Usage:
- *   const { status, imageUrls } = useDesignGeneration(firestoreDocumentId);
- */
 export function useDesignGeneration(firestoreDocumentId: string | null) {
   const [state, setState] = useState<DesignGenerationState>({
     status: "idle",
@@ -56,7 +29,7 @@ export function useDesignGeneration(firestoreDocumentId: string | null) {
 
     setState({ status: "monitoring", imageUrls: [], variants: [] });
 
-    const docRef = doc(db, "designsFromPrompt", firestoreDocumentId);
+    const docRef = doc(getDb(), "designsFromPrompt", firestoreDocumentId);
 
     const unsubscribe = onSnapshot(
       docRef,
@@ -65,13 +38,12 @@ export function useDesignGeneration(firestoreDocumentId: string | null) {
         if (!data) return;
 
         const resultsMap = data.results_map as
-          | Record<string, Design>
+          | Record<string, FirestoreDesign>
           | undefined;
 
         if (!resultsMap) return;
 
-        // Extract all variants and image URLs from results_map
-        const allVariants: DesignVariant[] = [];
+        const allVariants: FirestoreDesignVariant[] = [];
         const allImageUrls: string[] = [];
 
         for (const design of Object.values(resultsMap)) {
