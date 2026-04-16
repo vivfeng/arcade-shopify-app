@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Instrument Sans", sans-serif;
+  --font-display: "Inter", sans-serif;
+  --font-mono: "DM Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  --color-page: #f7f4f0;
+  --color-card: #ffffff;
+  --color-card-border: #deddd5;
+  --color-card-border-soft: #e1dfdb;
+  --color-card-border-hover: #c5c2bc;
+  --color-surface-muted: #e9e5d8;
+
+  --color-primary: #0f0f0f;
+  --color-secondary: #45413b;
+  --color-subdued: #696864;
+
+  --color-gold: #988c52;
+  --color-gold-dark: #6b6339;
+  --color-gold-pale: #f3eec5;
+  --color-gold-border: #d4ce9e;
+
+  --color-success-bg: #e8f8ed;
+  --color-success-fg: #2ca84f;
+
+  --color-accent: #fcff7b;
+
+  --shadow-card: 0px 1px 4px 0px rgba(0, 0, 0, 0.06);
+  --shadow-dropdown: 0px 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

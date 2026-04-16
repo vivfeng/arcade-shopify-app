@@ -2,10 +2,19 @@
 module.exports = {
   root: true,
   extends: [
-    "@remix-run/eslint-config",
-    "@remix-run/eslint-config/node",
+    "eslint:recommended",
     "prettier",
   ],
+  parserOptions: {
+    ecmaVersion: "latest",
+    sourceType: "module",
+    ecmaFeatures: { jsx: true },
+  },
+  env: {
+    browser: true,
+    node: true,
+    es2022: true,
+  },
   globals: {
     shopify: "readonly",
   },
