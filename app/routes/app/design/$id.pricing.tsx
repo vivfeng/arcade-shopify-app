@@ -327,7 +327,6 @@ export default function PricingReview() {
         subtitle={`Set your prices and publish ${product.title} to Shopify`}
         backLabel="Back"
         onBack={() => navigate(-1)}
-        maxWidth={800}
       >
         {publishError && <ErrorBanner message={publishError} />}
 
