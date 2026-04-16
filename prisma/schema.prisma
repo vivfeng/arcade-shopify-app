@@ -32,17 +32,15 @@ model Session {
 // ─── Shop ───
 
 model Shop {
-  id              String          @id @default(cuid())
-  domain          String          @unique // e.g. "my-store.myshopify.com"
-  accessToken     String
-  arcadeAccountId String?         // linked Arcade account (auto-provisioned or matched)
-  email           String?
-  name            String?
-  installedAt     DateTime        @default(now())
-  onboardingComplete Boolean     @default(false)
-  uninstalledAt   DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  domain             String          @unique // e.g. "my-store.myshopify.com"
+  arcadeAccountId    String?         // Firebase UID — the only auth-related field stored
+  name               String?
+  installedAt        DateTime        @default(now())
+  onboardingComplete Boolean         @default(false)
+  uninstalledAt      DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   products ArcadeProduct[]
   orders   ArcadeOrder[]
@@ -90,12 +88,16 @@ model ProductType {
 
 enum ProductStatus {
   DRAFT
+  PUBLISHING
   ACTIVE
 }
 
 model ArcadeProduct {
   id                String        @id @default(cuid())
   designPrompt      String?
+  arcadeDocumentId  String?       // Arcade backend document ID for Firestore polling
+  generationId      String?       // Arcade dream ID (from design-from-prompt-async response)
+  designVariantId   String?       // Arcade design variant UUID (required for flash edits)
   imageUrls         Json          @default("[]") // AI-generated imagery URLs
   shopifyProductGid String?       // e.g. "gid://shopify/Product/12345"
   status            ProductStatus @default(DRAFT)
@@ -110,10 +112,17 @@ model ArcadeProduct {
   productTypeId String
   productType   ProductType @relation(fields: [productTypeId], references: [id])
 
+  // Self-referential: links to the parent generation this was derived from
+  // (via regenerate or iterative edit). Null for initial generations.
+  parentProductId String?
+  parentProduct   ArcadeProduct?  @relation("DesignHistory", fields: [parentProductId], references: [id])
+  childProducts   ArcadeProduct[] @relation("DesignHistory")
+
   variants ProductVariant[]
 
   @@index([shopId])
   @@index([productTypeId])
+  @@index([parentProductId])
 }
 
 model ProductVariant {

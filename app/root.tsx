@@ -4,7 +4,8 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-} from "@remix-run/react";
+} from "react-router";
+import "./app.css";
 
 export default function App() {
   return (
