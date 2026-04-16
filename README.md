@@ -12,72 +12,96 @@ Modeled after [Printful's embedded Shopify integration](https://apps.shopify.com
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | [React Router v7](https://reactrouter.com/) via [`@shopify/shopify-app-react-router`](https://www.npmjs.com/package/@shopify/shopify-app-react-router) — **target stack for all new work**. The current tree is still on the legacy `@shopify/shopify-app-remix` scaffold; see [ADR 0001](docs/adr/0001-remix-to-react-router.md) for the migration plan. |
-| UI | [Polaris](https://polaris.shopify.com/) (Shopify's design system) |
+| Framework | [React Router v7](https://reactrouter.com/) via [`@shopify/shopify-app-react-router`](https://www.npmjs.com/package/@shopify/shopify-app-react-router) |
+| UI | [Polaris](https://polaris.shopify.com/) + [Tailwind CSS v4](https://tailwindcss.com/) with custom design tokens |
+| Icons | [Lucide React](https://lucide.dev/) |
 | Embedded UI | [App Bridge 4](https://shopify.dev/docs/api/app-bridge) |
 | Database | PostgreSQL + [Prisma](https://www.prisma.io/) |
-| Auth | Shopify OAuth + session tokens |
-| API | Shopify GraphQL Admin API |
+| Auth | Shopify OAuth + session tokens; Firebase Auth for Arcade API identity |
+| AI Design API | Arcade Backend (REST) with Firebase ID token auth |
+| Real-time | [Firebase Firestore](https://firebase.google.com/docs/firestore) (client-side `onSnapshot` for design generation progress) |
+| Validation | [Zod v4](https://zod.dev/) for runtime env validation |
+| API | Shopify GraphQL Admin API (`2026-01`) |
 | Hosting | Vercel |
 
 ## Ticket requirements (read before opening or picking up work)
 
-Per [ADR 0001](docs/adr/0001-remix-to-react-router.md), this repo is
-migrating off Remix. The migration runs as M0 and is a hard prerequisite
-for any new M2+ feature work. While M0 is in flight:
-
-- **New tickets must be scoped against React Router**, not Remix. Write
-  acceptance criteria, snippets, and file paths as they will exist in
-  the rescaffolded repo. A ticket that says "add a Remix loader for X"
-  should be rewritten before it gets picked up.
-- **No new `@remix-run/*` or `@shopify/shopify-app-remix` imports** in
-  code changes. New files are written against React Router v7 /
-  `@shopify/shopify-app-react-router` from day one. If you are editing
-  an existing Remix file, match the local style but do not *spread*
-  Remix imports to new files.
-- **Bug fixes against existing Remix files are still allowed** — we
-  cannot ship broken code while waiting on M0 — but must stay minimal.
-  Anything larger than an import-swap or a surgical correction gets
-  rolled into the rescaffold instead.
+- All code uses **React Router v7** / `@shopify/shopify-app-react-router`.
+  There are zero `@remix-run/*` or `@shopify/shopify-app-remix` imports
+  in the codebase ([ADR 0001](docs/adr/0001-remix-to-react-router.md) M0
+  completed).
 - **Every new loader/action must scope its DB writes by
-  `session.shop`**, never by `db.shop.findFirst()`. This is blocker B3
-  in the ADR and applies to both Remix and React Router files.
-
-If a ticket's scope does not fit inside these rules, escalate at triage
-rather than working around them.
+  `session.shop`**, never by `db.shop.findFirst()`.
+- Routes use **explicit code-based config** in `app/routes.ts` — do not
+  rely on filesystem conventions. When adding a new route, register it
+  in `routes.ts` and place the file in the matching nested folder.
+- Server-only modules use the `.server.ts` suffix to guarantee they are
+  tree-shaken from client bundles.
+- Environment variables are validated at startup via Zod schemas in
+  `app/lib/env/`. Add new vars to the schema *and* `.env.example`.
+- **Never commit secrets.** `.env` and all variants are gitignored.
+  `.env.example` must only contain empty values. If a credential is
+  accidentally committed, rotate it immediately — git history is
+  permanent. See [Rule 1](docs/tickets/artsem-review-epic.md#rule-1-never-commit-secrets-or-env-var-values).
+- **Do not create or edit Prisma migrations by hand.** Change the
+  schema, run `npx prisma migrate dev --name <name>`, and commit the
+  generated SQL. Never delete or modify an existing migration folder.
+  See [Rule 2](docs/tickets/artsem-review-epic.md#rule-2-do-not-create-or-modify-prisma-migrations-by-hand).
 
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                 SHOPIFY ADMIN (iframe)                 │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │   Arcade Embedded App (React Router + Polaris)  │  │
-│  │                                                  │  │
-│  │  Onboarding → Category Grid → Product Type      │  │
-│  │  → Prompt Design → AI Design (PDP)              │  │
-│  │  → Pricing Config → Publish to Store            │  │
-│  │  Orders Dashboard (tabbed) · Edit Product       │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
-          │                          │
-     App Bridge                Session Token
-     Navigation                    Auth
-          │                          │
-┌───────────────────┐    ┌─────────────────────┐
-│ Shopify GraphQL   │    │ Arcade Backend API   │
-│ Admin API         │    │ - Account Provision  │
-│ - productCreate   │    │ - AI Design Engine   │
-│ - fulfillment     │    │ - Order Routing      │
-│ - orders          │    │ - Manufacturer Mgmt  │
-└───────────────────┘    └─────────────────────┘
-          │                        │
-┌───────────────────┐    ┌─────────────────────┐
-│ Shopify Webhooks  │    │ Manufacturer Network │
-│ - orders/create   │    │ - Fulfillment        │
-│ - app/uninstalled │    │ - Tracking           │
-│ - GDPR (x3)      │    └─────────────────────┘
-└───────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      SHOPIFY ADMIN (iframe)                       │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Arcade Embedded App (React Router v7 + Polaris + Tailwind) │  │
+│  │                                                             │  │
+│  │  Onboarding → Category Grid → Product Type                 │  │
+│  │  → Prompt Design → AI Design (PDP)                         │  │
+│  │  → Pricing Config → Publish to Store                       │  │
+│  │  Orders Dashboard (tabbed) · Edit Product                  │  │
+│  └──────────┬──────────────────────┬──────────────────────────┘  │
+└─────────────┼──────────────────────┼─────────────────────────────┘
+              │                      │
+         App Bridge            Session Token
+         Navigation                Auth
+              │                      │
+   ┌──────────┴──────────┐   ┌──────┴──────────────────────────┐
+   │ Shopify GraphQL     │   │ App Server (React Router SSR)    │
+   │ Admin API (2026-01) │   │                                  │
+   │ - productCreate     │   │  arcadeAuth.server.ts            │
+   │ - variantsBulkCreate│   │   └ Firebase Admin → custom token│
+   │ - stagedUploads     │   │   └ REST exchange → ID token     │
+   │ - fulfillment       │   │   └ in-memory cache w/ expiry    │
+   │ - orders            │   │                                  │
+   └─────────────────────┘   │  arcadeApi.server.ts             │
+                              │   └ POST /design-from-prompt     │
+                              │   └ POST /batch/design-variants  │
+                              │   └ auto-retry on 401            │
+                              │                                  │
+                              │  shopifyPublish.server.ts        │
+                              │   └ staged upload → productCreate│
+                              └──────────┬──────────────────────┘
+                                         │
+              ┌──────────────────────────┼──────────────────────┐
+              │                          │                      │
+   ┌──────────▼──────────┐   ┌──────────▼──────────┐   ┌──────▼──────────┐
+   │ Arcade Backend API  │   │ Firebase / Firestore │   │ PostgreSQL      │
+   │ - AI Design Engine  │   │ - Auth (ID tokens)   │   │ (Prisma ORM)    │
+   │ - Order Routing     │   │ - designsFromPrompt  │   │ - Shop          │
+   │ - Manufacturer Mgmt │   │   collection (real-  │   │ - ArcadeProduct │
+   └─────────────────────┘   │   time onSnapshot)   │   │ - ProductVariant│
+              │               └──────────────────────┘   │ - ArcadeOrder   │
+   ┌──────────▼──────────┐                               │ - Session       │
+   │ Manufacturer Network│            ┌─────────────────►│ - Categories    │
+   │ - Fulfillment       │            │                  └─────────────────┘
+   │ - Tracking          │            │
+   └─────────────────────┘   ┌────────┴──────────┐
+                              │ Shopify Webhooks  │
+                              │ - app/uninstalled │
+                              │ - app/scopes-update│
+                              │ - GDPR (x3)      │
+                              └───────────────────┘
 ```
 
 ## Core User Flows
@@ -129,8 +153,9 @@ Tabbed interface: **All | Unfulfilled | In Production | Shipped | Delivered** (w
 
 | Entity | Purpose |
 |--------|---------|
-| **Shop** | Shopify store connection — domain, access token, linked Arcade account |
-| **ArcadeProduct** | Product designed in Arcade — design prompt, AI imagery, Shopify product GID, status (draft/active) |
+| **Session** | Shopify session storage (managed by `@shopify/shopify-app-session-storage-prisma`) |
+| **Shop** | Shopify store connection — domain, `arcadeAccountId` (Firebase UID). No access token or email stored directly; auth is delegated to Firebase. |
+| **ArcadeProduct** | Product designed in Arcade — design prompt, Firestore document ID, generation/variant IDs, AI imagery URLs, Shopify product GID, status (draft/publishing/active) |
 | **ProductVariant** | Per-variant config — size, fabric, product cost, retail price, markup % |
 | **ArcadeOrder** | Order from Shopify — manufacturer routing, fulfillment status, tracking, payment status |
 | **ProductCategory** | Predefined categories (static for v1) — visual grid tile with image |
@@ -173,57 +198,102 @@ Categories are **static at launch** for simplicity and quality control.
 
 ## Screen Inventory
 
-| Screen | Route | Description |
-|--------|-------|-------------|
-| Onboarding | `app._index` | Welcome: "Turn thoughts into things", value props, 3-step overview, "Get Started" CTA |
-| Category Grid | `app.categories._index` | Visual grid of 13 home textile category tiles |
-| Product Type Selection | `app.categories.$slug` | Product types within category — thumbnail, specs, base price, "Design" CTA |
-| Prompt Design | `app.design.prompt` | Text area + structured chips (Category, Colors, Artist, Image upload) |
-| AI Design (PDP) | `app.design.$id` | AI imagery left, details right, size + fabric checkboxes, manufacturer attribution |
-| Review & Pricing | `app.design.$id.pricing` | Side-by-side preview, markup % control, per-variant pricing table |
-| Publish Confirmation | (modal) | Success state with "View in Shopify Admin" + "Create Another Product" |
-| Edit Product | `app.products.$id` | Title, rich text editor (AI assist), status toggle, publishing, sales |
-| Orders Dashboard | `app.orders` | Tabbed (All/Unfulfilled/In Production/Shipped/Delivered), filterable, exportable |
-| Order Detail | `app.orders.$id` | Manufacturer, ETA, tracking, carrier, status timeline |
+| Screen | Route (URL) | File | Description |
+|--------|-------------|------|-------------|
+| Root redirect | `/` | `routes/_index.tsx` | Redirects to `/app` |
+| Onboarding / Home | `/app` | `routes/app/home.tsx` | Welcome: value props, 3-step overview, "Get Started" CTA |
+| Category Grid | `/app/categories` | `routes/app/categories/index.tsx` | Visual grid of 13 home textile category tiles |
+| Product Type Selection | `/app/categories/:slug` | `routes/app/categories/$slug.tsx` | Product types within category — thumbnail, specs, base price, "Design" CTA |
+| Prompt Design | `/app/design/prompt` | `routes/app/design/prompt.tsx` | Text area + structured chips (Category, Colors, Artist, Image upload) |
+| Review & Pricing | `/app/design/:id/pricing` | `routes/app/design/$id.pricing.tsx` | Side-by-side preview, markup % control, per-variant pricing table |
+| Publish Success | `/app/design/:id/success` | `routes/app/design/$id.success.tsx` | Success state with "View in Shopify Admin" + "Create Another Product" |
+| Orders Dashboard | `/app/orders` | `routes/app/orders.tsx` | Tabbed (All/Unfulfilled/In Production/Shipped/Delivered), filterable, exportable |
+| Auth callback | `/auth/*` | `routes/auth/$.tsx` | Shopify OAuth callback |
+| Auth login | `/auth/login` | `routes/auth/login.tsx` | Shopify login bounce |
+
+All `/app/*` routes share the layout in `routes/app/layout.tsx` which provides App Bridge, Polaris `AppProvider`, and `NavMenu`.
 
 ## Project Structure
 
 ```
 arcade-shopify-app/
 ├── app/
+│   ├── routes.ts                          # Explicit route config (code-based, not filesystem)
+│   ├── root.tsx                           # HTML shell, fonts, Tailwind entry
+│   ├── entry.server.tsx                   # SSR entry (ServerRouter)
+│   ├── app.css                            # Tailwind v4 + custom design tokens
+│   ├── shopify.server.ts                  # Shopify app config (API key, session storage)
+│   ├── db.server.ts                       # Prisma client singleton
+│   │
 │   ├── routes/
-│   │   ├── app._index.tsx              # Onboarding / home
-│   │   ├── app.categories._index.tsx   # Category browsing grid
-│   │   ├── app.categories.$slug.tsx    # Product type selection
-│   │   ├── app.design.prompt.tsx       # Prompt design screen
-│   │   ├── app.design.$id.tsx          # AI design flow (PDP layout)
-│   │   ├── app.design.$id.pricing.tsx  # Review & pricing config
-│   │   ├── app.products.$id.tsx        # Edit product details
-│   │   ├── app.orders.tsx              # Orders dashboard (tabbed)
-│   │   ├── app.orders.$id.tsx          # Order detail
-│   │   ├── auth.$.tsx                  # OAuth callback
-│   │   └── webhooks.tsx                # Webhook handlers
+│   │   ├── _index.tsx                     # Root redirect → /app
+│   │   ├── app/
+│   │   │   ├── layout.tsx                 # App shell: App Bridge + Polaris + NavMenu
+│   │   │   ├── home.tsx                   # Onboarding / dashboard home
+│   │   │   ├── orders.tsx                 # Orders dashboard (tabbed)
+│   │   │   ├── categories/
+│   │   │   │   ├── index.tsx              # Category browsing grid
+│   │   │   │   └── $slug.tsx              # Product types within category
+│   │   │   └── design/
+│   │   │       ├── prompt.tsx             # Prompt design + AI generation
+│   │   │       ├── $id.pricing.tsx        # Review & pricing config
+│   │   │       └── $id.success.tsx        # Publish success screen
+│   │   ├── auth/
+│   │   │   ├── $.tsx                      # OAuth callback catch-all
+│   │   │   ├── login.tsx                  # Login bounce
+│   │   │   └── login.error.server.ts      # Login error helper
+│   │   └── webhooks/
+│   │       ├── app-uninstalled.tsx         # Shop cleanup on uninstall
+│   │       ├── app-scopes-update.tsx       # Scope change handler
+│   │       ├── customers-data-request.tsx  # GDPR data request
+│   │       ├── customers-redact.tsx        # GDPR customer redact
+│   │       └── shop-redact.tsx             # GDPR shop redact
+│   │
 │   ├── components/
-│   │   ├── CategoryGrid.tsx            # Visual grid of category tiles
-│   │   ├── ProductTypeCard.tsx         # Product type row with specs
-│   │   ├── PromptInput.tsx             # Design prompt + structured chips
-│   │   ├── DesignPreview.tsx           # AI-generated imagery display
-│   │   ├── VariantSelector.tsx         # Size + fabric checkboxes
-│   │   ├── PricingTable.tsx            # Per-variant pricing editor
-│   │   ├── OrdersTable.tsx             # Tabbed orders with filters
-│   │   └── RichTextEditor.tsx          # Product description editor
-│   ├── models/                         # Prisma client helpers
-│   └── shopify.server.ts              # Shopify app config
+│   │   ├── index.ts                       # Barrel export
+│   │   ├── layout/
+│   │   │   └── PageShell.tsx              # Consistent page heading + back nav
+│   │   └── ui/
+│   │       ├── BackButton.tsx
+│   │       ├── ErrorBanner.tsx
+│   │       ├── LoadingCard.tsx
+│   │       ├── Spinner.tsx
+│   │       └── StatusBadge.tsx
+│   │
+│   ├── services/
+│   │   ├── arcade/
+│   │   │   ├── arcadeApi.server.ts        # Arcade REST client (design generation, variants)
+│   │   │   └── arcadeAuth.server.ts       # Firebase Admin → ID token minting + caching
+│   │   ├── firebase/
+│   │   │   └── firebase.ts                # Firebase client SDK (Firestore for real-time)
+│   │   └── shopify/
+│   │       └── shopifyPublish.server.ts   # Staged uploads + productCreate + variantsBulkCreate
+│   │
+│   ├── hooks/
+│   │   └── useDesignGeneration.ts         # Firestore onSnapshot for design progress
+│   │
+│   ├── lib/
+│   │   ├── env/
+│   │   │   ├── env.server.ts              # Server env schema (Zod) — parsed at startup
+│   │   │   └── client.env.ts              # Client env schema (VITE_ vars)
+│   │   └── format.ts                      # Currency / number formatting helpers
+│   │
+│   └── types/
+│       ├── arcade.ts                      # Design generation, variant, Firestore types
+│       └── orders.ts                      # Order row, payment/fulfillment status types
+│
 ├── prisma/
-│   ├── schema.prisma                   # Database schema
-│   ├── migrations/                     # Prisma migrations
-│   └── seed.ts                         # Category + product type seed data
-├── public/                             # Static assets (category images)
+│   ├── schema.prisma                      # Full database schema
+│   ├── migrations/                        # Prisma migrations
+│   └── seed.ts                            # Category + product type seed data
+│
 ├── docs/
-│   └── adr/                            # Architecture decision records
-├── shopify.app.toml                    # Shopify app configuration (dev)
-├── shopify.app.arcadeai.toml           # Shopify app configuration (prod)
-├── vite.config.ts
+│   └── adr/                               # Architecture decision records
+│
+├── public/                                # Static assets (logos)
+├── shopify.app.toml                       # Shopify app configuration (dev)
+├── shopify.app.arcadeai.toml              # Shopify app configuration (prod)
+├── vite.config.ts                         # Vite + React Router + Tailwind plugins
 ├── package.json
 └── tsconfig.json
 ```
@@ -246,7 +316,8 @@ npm install
 
 # Set up environment variables
 cp .env.example .env
-# Fill in: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, DATABASE_URL, etc.
+# Fill in all required vars — the app validates them at startup via Zod
+# and will print a clear error if any are missing.
 
 # Run database migrations
 npx prisma migrate dev
@@ -260,26 +331,36 @@ shopify app dev
 
 ### Environment Variables
 
+All variables are validated at startup via Zod schemas in `app/lib/env/`.
+Variables prefixed with `VITE_` are exposed to the browser bundle.
+
 | Variable | Description |
 |----------|------------|
 | `SHOPIFY_API_KEY` | App API key from Shopify Partners |
 | `SHOPIFY_API_SECRET` | App API secret |
+| `SHOPIFY_APP_URL` | App URL (set by `shopify app dev`, or your production URL) |
 | `SCOPES` | `read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments` |
-| `HOST` | App URL (ngrok/cloudflare tunnel for dev) |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `ARCADE_API_URL` | Arcade backend API base URL |
-| `ARCADE_API_KEY` | Arcade backend API key |
+| `ARCADE_API_URL` | Arcade backend REST API base URL |
+| `ARCADE_API_KEY` | Arcade backend API key (sent as `X-Vercel-Authorization` header) |
+| `VITE_FIREBASE_WEB_API_KEY` | Firebase Web API key (browser) |
+| `VITE_FIREBASE_APP_ID` | Firebase app ID (browser) |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain (browser) |
+| `VITE_FIREBASE_DATABASE_URL` | Firebase Realtime DB URL (browser) |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID (browser) |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase Admin SDK service account JSON (server-only, never exposed to browser) |
+| `SHOP_CUSTOM_DOMAIN` | _(optional)_ Custom shop domain for non-standard myshopify.com domains |
 
 ## Milestones
 
-| Milestone | Focus |
-|-----------|-------|
-| **M0: React Router rescaffold** | Rescaffold the app against `@shopify/shopify-app-react-router`, port loaders/actions/webhooks/Prisma, clear `npm audit` findings, lock in the pre-migration blockers (B1–B4 in [ADR 0001](docs/adr/0001-remix-to-react-router.md)). Must land before M2 tickets begin. |
-| **M1: Foundation** | Scaffold, DB, OAuth, GDPR webhooks, designs, category seed data. |
-| **M2: Core Flows** | Onboarding, category grid, prompt design, AI design PDP, variant selection, pricing config, publish to Shopify. *All M2 work is written against React Router, not Remix.* |
-| **M3: Order Pipeline** | Order webhooks, manufacturer routing, fulfillment tracking, orders dashboard. |
-| **M4: Testing & Polish** | E2E testing, embedded performance, App Bridge compliance, analytics, edit product flow. |
-| **M5: Beta & Submit** | Beta with existing users, bug fixes, App Store submission. |
+| Milestone | Status | Focus |
+|-----------|--------|-------|
+| **M0: React Router rescaffold** | **Done** | Migrated from Remix to React Router v7, ported all loaders/actions/webhooks, explicit route config, Tailwind + shared components, Arcade API integration with Firebase auth, Zod env validation. See [ADR 0001](docs/adr/0001-remix-to-react-router.md). |
+| **M1: Foundation** | Done | Scaffold, DB, OAuth, GDPR webhooks, designs, category seed data. |
+| **M2: Core Flows** | In progress | Onboarding, category grid, prompt design, AI design PDP, variant selection, pricing config, publish to Shopify. |
+| **M3: Order Pipeline** | Planned | Order webhooks, manufacturer routing, fulfillment tracking, orders dashboard. |
+| **M4: Testing & Polish** | Planned | E2E testing, embedded performance, App Bridge compliance, analytics, edit product flow. |
+| **M5: Beta & Submit** | Planned | Beta with existing users, bug fixes, App Store submission. |
 
 ## Shopify App Store Requirements
 

@@ -5,7 +5,6 @@ interface PageShellProps {
   subtitle?: string;
   backLabel?: string;
   onBack?: () => void;
-  maxWidth?: number;
   children: React.ReactNode;
 }
 
@@ -14,13 +13,11 @@ export function PageShell({
   subtitle,
   backLabel,
   onBack,
-  maxWidth,
   children,
 }: PageShellProps) {
   return (
     <div
       className="flex flex-col gap-3.5"
-      style={maxWidth ? { maxWidth } : undefined}
     >
       {onBack && (
         <BackButton onClick={onBack}>{backLabel ?? "Back"}</BackButton>

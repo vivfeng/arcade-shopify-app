@@ -2,11 +2,20 @@ node_modules
 .react-router
 .cache
 build
-.env
 *.sqlite
 *.sqlite-journal
 prisma/dev.sqlite
 .DS_Store
 dist
 .vercel
-.env*.local
+
+# Environment files — NEVER commit secrets (see docs/tickets/artsem-review-epic.md Rule 1)
+.env
+.env.*
+!.env.example
+
+# Private keys and service account files
+*.pem
+*.key
+*.p12
+firebase-service-account*.json
