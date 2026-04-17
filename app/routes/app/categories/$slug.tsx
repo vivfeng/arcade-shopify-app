@@ -1,5 +1,5 @@
 import { data, type LoaderFunctionArgs, useLoaderData, useNavigate } from "react-router";
-import { Page } from "@shopify/polaris";
+import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { formatPrice } from "../../../lib/format";
@@ -54,7 +54,7 @@ export default function CategoryProductTypes() {
   const singularName = category.name.toLowerCase().replace(/s$/, "");
 
   return (
-    <Page>
+    <AppPage>
       <PageShell
         heading={category.name}
         subtitle={`Choose a ${singularName} style to start designing`}
@@ -109,6 +109,6 @@ export default function CategoryProductTypes() {
           </div>
         ))}
       </PageShell>
-    </Page>
+    </AppPage>
   );
 }
