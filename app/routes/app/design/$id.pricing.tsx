@@ -8,7 +8,7 @@ import {
   useFetcher,
   Link,
 } from "react-router";
-import { Page } from "@shopify/polaris";
+import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { formatPrice } from "../../../lib/format";
@@ -20,10 +20,13 @@ import { PageShell } from "../../../components/layout/PageShell";
 import { ArrowRight } from "lucide-react";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  const product = await db.arcadeProduct.findUnique({
-    where: { id: params.id },
+  const product = await db.arcadeProduct.findFirst({
+    where: {
+      id: params.id,
+      shop: { domain: session.shop },
+    },
     select: {
       id: true,
       title: true,
@@ -138,8 +141,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return data({ error: "Invalid variant or price" }, { status: 400 });
     }
 
-    const variant = await db.productVariant.findUnique({
-      where: { id: variantId },
+    const variant = await db.productVariant.findFirst({
+      where: {
+        id: variantId,
+        arcadeProduct: {
+          id: params.id,
+          shop: { domain: session.shop },
+        },
+      },
       select: { productCost: true },
     });
 
@@ -177,8 +186,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "publish") {
-    const product = await db.arcadeProduct.findUnique({
-      where: { id: params.id },
+    const product = await db.arcadeProduct.findFirst({
+      where: {
+        id: params.id,
+        shop: { domain: session.shop },
+      },
       select: {
         id: true,
         title: true,
@@ -321,7 +333,7 @@ export default function PricingReview() {
   }, [isPublishing, publishFetcher]);
 
   return (
-    <Page>
+    <AppPage>
       <PageShell
         heading="Review & Pricing"
         subtitle={`Set your prices and publish ${product.title} to Shopify`}
@@ -431,6 +443,6 @@ export default function PricingReview() {
           </button>
         </div>
       </PageShell>
-    </Page>
+    </AppPage>
   );
 }

@@ -147,6 +147,13 @@ export async function ensureArcadePrincipal(
   return uid;
 }
 
+export async function createClientAuthToken(
+  arcadeAccountId: string,
+): Promise<string> {
+  const firebaseApp = getFirebaseAdmin();
+  return firebaseApp.auth().createCustomToken(arcadeAccountId);
+}
+
 export async function getValidArcadeToken(
   arcadeAccountId: string,
   forceRefresh = false,

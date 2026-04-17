@@ -1,15 +1,18 @@
 import { data, redirect, type LoaderFunctionArgs, Link, useLoaderData } from "react-router";
-import { Page } from "@shopify/polaris";
+import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { gidToNumericId } from "../../../lib/format";
 import { CheckCircle, Sparkles, ArrowRight } from "lucide-react";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  const product = await db.arcadeProduct.findUnique({
-    where: { id: params.id },
+  const product = await db.arcadeProduct.findFirst({
+    where: {
+      id: params.id,
+      shop: { domain: session.shop },
+    },
     select: {
       id: true,
       title: true,
@@ -103,11 +106,11 @@ export default function PublishSuccess() {
   const { product } = useLoaderData<typeof loader>();
 
   return (
-    <Page>
+    <AppPage>
       <PublishSuccessCard
         displayName={product.displayName}
         shopifyProductGid={product.shopifyProductGid}
       />
-    </Page>
+    </AppPage>
   );
 }
