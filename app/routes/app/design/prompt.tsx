@@ -296,7 +296,6 @@ export default function PromptDesign() {
         subtitle="Describe your design and let AI create it for you"
         backLabel="Back to Categories"
         onBack={() => navigate(`/app/categories/${productType.category.slug}`)}
-        maxWidth={640}
       >
         {/* Prompt card */}
         <div className="flex flex-col gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card">
