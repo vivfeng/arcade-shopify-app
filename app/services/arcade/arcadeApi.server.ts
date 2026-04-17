@@ -13,7 +13,7 @@ import type {
   DesignDocument,
 } from "../../types/arcade";
 
-export { resolveArcadeAccountId } from "./arcadeAuth.server";
+export { resolveArcadeAccountId, createClientAuthToken } from "./arcadeAuth.server";
 
 export type {
   DesignGenerationRequest,
