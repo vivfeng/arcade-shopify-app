@@ -443,7 +443,9 @@ export default function OrdersDashboard() {
     <div className="min-h-screen bg-page px-8 pt-7 pb-12 font-sans">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="m-0 text-[26px] font-semibold text-primary">Orders</h1>
+        <h1 className="m-0 font-display text-[26px] font-semibold tracking-[-0.03em] text-primary leading-[1.08]">
+          Orders
+        </h1>
         <div className="flex items-center gap-2">
           <button
             type="button"

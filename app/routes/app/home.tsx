@@ -84,7 +84,7 @@ export default function Home() {
           </div>
 
           <BlockStack gap="300">
-            <Text as="h1" variant="headingXl" fontWeight="bold">
+            <Text as="h1" variant="headingXl" fontWeight="semibold">
               Turn thoughts into things
             </Text>
             <Text as="p" variant="bodyLg" tone="subdued">
