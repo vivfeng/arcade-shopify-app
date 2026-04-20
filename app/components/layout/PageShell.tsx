@@ -1,0 +1,36 @@
+import { BackButton } from "../ui/BackButton";
+
+interface PageShellProps {
+  heading: string;
+  subtitle?: string;
+  backLabel?: string;
+  onBack?: () => void;
+  children: React.ReactNode;
+}
+
+export function PageShell({
+  heading,
+  subtitle,
+  backLabel,
+  onBack,
+  children,
+}: PageShellProps) {
+  return (
+    <div
+      className="flex flex-col gap-3.5"
+    >
+      {onBack && (
+        <BackButton onClick={onBack}>{backLabel ?? "Back"}</BackButton>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <h1 className="m-0 font-display text-[26px] font-semibold tracking-[-0.03em] text-primary leading-[1.08]">
+          {heading}
+        </h1>
+        {subtitle && <p className="m-0 text-sm text-subdued">{subtitle}</p>}
+      </div>
+
+      {children}
+    </div>
+  );
+}
