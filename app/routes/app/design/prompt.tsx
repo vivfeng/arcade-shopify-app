@@ -17,13 +17,24 @@ import {
   requireArcadeAccountIdForApi,
 } from "../../../services/arcade/arcadeApi.server";
 import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
 import { uploadInspirationImage } from "../../../services/firebase/storage";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { PageShell } from "../../../components/layout/PageShell";
-import { Sparkles, Palette, Image as ImageIcon, LayoutGrid, ArrowRight, Pencil, X, Loader2 } from "lucide-react";
+import { CreationPromptBar } from "../../../components/create/CreationPromptBar";
+import { InspirationColorsTrigger } from "../../../components/create/InspirationColorsTrigger";
+import type { CreateInspirationColor } from "../../../lib/inspirationColors";
+import { MAX_CREATE_INSPIRATION_COLORS } from "../../../lib/inspirationColors";
+import {
+  Sparkles,
+  Image as ImageIcon,
+  LayoutGrid,
+  ArrowRight,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import { ChipDropdown } from "./components";
 
 const MAX_INSPIRATION_IMAGES = 3;
@@ -37,18 +48,12 @@ const ARTIST_STYLES = [
   "Impressionist",
   "Art Deco",
 ];
-const COLOR_OPTIONS = [
-  "Warm Neutrals",
-  "Cool Blues",
-  "Earth Tones",
-  "Pastels",
-  "Bold & Vibrant",
-  "Monochrome",
-  "Sunset",
-  "Forest Green",
-];
 
-function parseInspirationImageUrls(raw: FormDataEntryValue | null): string[] | undefined {
+const INSPIRATION_HEX_ITEM = /^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
+
+function parseInspirationImageUrls(
+  raw: FormDataEntryValue | null,
+): string[] | undefined {
   if (typeof raw !== "string" || raw.length === 0) return undefined;
   try {
     const parsed = JSON.parse(raw);
@@ -57,6 +62,26 @@ function parseInspirationImageUrls(raw: FormDataEntryValue | null): string[] | u
       (u): u is string => typeof u === "string" && u.length > 0,
     );
     return urls.length > 0 ? urls : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseInspirationHexCodes(
+  raw: FormDataEntryValue | null,
+): string[] | undefined {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const out: string[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string" && INSPIRATION_HEX_ITEM.test(item)) {
+        out.push(item);
+      }
+      if (out.length >= MAX_CREATE_INSPIRATION_COLORS) break;
+    }
+    return out.length > 0 ? out : undefined;
   } catch {
     return undefined;
   }
@@ -110,7 +135,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const intent = (formData.get("intent") as string) || "generate";
@@ -121,7 +146,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   if (!shop) {
-    return data({ error: "Shop not found for authenticated session" }, { status: 400 });
+    return data(
+      { error: "Shop not found for authenticated session" },
+      { status: 400 },
+    );
   }
 
   if (intent === "edit") {
@@ -185,10 +213,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const inspirationImageUrls = parseInspirationImageUrls(
     formData.get("inspirationImageUrls"),
   );
+  const inspirationColorHexcodes = parseInspirationHexCodes(
+    formData.get("inspirationColorHexes"),
+  );
 
   try {
     const generation = await requestDesignGeneration(
-      { prompt, inspirationImageUrls },
+      {
+        prompt,
+        ...(inspirationImageUrls ? { inspirationImageUrls } : {}),
+        ...(inspirationColorHexcodes ? { inspirationColorHexcodes } : {}),
+      },
       arcadeAccountId,
     );
 
@@ -220,7 +255,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function PromptDesign() {
-  const { productType, arcadeAccountId, firebaseCustomToken } = useLoaderData<typeof loader>();
+  const { productType, arcadeAccountId, firebaseCustomToken } =
+    useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{
     productId?: string;
@@ -230,7 +266,9 @@ export default function PromptDesign() {
   }>();
 
   const [prompt, setPrompt] = useState("");
-  const [selectedColors, setSelectedColors] = useState<string | null>(null);
+  const [inspirationColors, setInspirationColors] = useState<
+    CreateInspirationColor[]
+  >([]);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -261,63 +299,92 @@ export default function PromptDesign() {
   const generationFailed =
     serverError != null ||
     design.status === "failed" ||
-    (savedProductId != null && !hasResults && !isLoading && firestoreDocId != null);
+    (savedProductId != null &&
+      !hasResults &&
+      !isLoading &&
+      firestoreDocId != null);
   const errorMessage = serverError
     ? serverError
     : design.error
       ? `Design generation failed: ${design.error}`
-      : "Design generation didn't return images this time. Your prompt has been saved — try hitting Regenerate above.";
+      : "Design generation didn't return images this time. Your prompt has been saved — try hitting Regenerate in the prompt bar below.";
   const mainImage = generatedImages[selectedImageIdx] ?? generatedImages[0];
+
+  const typewriterHints = useMemo(() => {
+    const typeName = productType.name.toLowerCase();
+    return [
+      `Create a ${typeName} with soft botanical motifs…`,
+      `Design a ${typeName} in warm earth tones and a hand-painted feel…`,
+      `Make a bold geometric ${typeName} for a modern space…`,
+    ];
+  }, [productType.name]);
+
+  const referencePreviewUrl = uploadedImageUrls[0] ?? null;
+  const referenceLabel =
+    uploadedImageUrls.length > 1
+      ? `${uploadedImageUrls.length} reference images`
+      : uploadedImageUrls.length === 1
+        ? "Reference image"
+        : null;
+
+  const buildFetcherPayload = useCallback(
+    (base: Record<string, string>) => {
+      let fullPrompt = prompt.trim();
+      if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
+      return {
+        ...base,
+        prompt: fullPrompt,
+        artist: selectedArtist ?? "",
+        inspirationImageUrls: JSON.stringify(uploadedImageUrls),
+        inspirationColorHexes: JSON.stringify(
+          inspirationColors.map((c) => c.hex),
+        ),
+      };
+    },
+    [prompt, selectedArtist, uploadedImageUrls, inspirationColors],
+  );
 
   const handleGenerate = useCallback(() => {
     if (!canGenerate) return;
 
-    let fullPrompt = prompt.trim();
-    if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
-    if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
-
     setSelectedImageIdx(0);
     setEditInstruction("");
     setFirestoreDocId(null);
     design.reset();
 
     fetcher.submit(
-      {
+      buildFetcherPayload({
         intent: "generate",
-        prompt: fullPrompt,
         productTypeId: productType.id,
-        colors: selectedColors || "",
-        artist: selectedArtist || "",
-        inspirationImageUrls: JSON.stringify(uploadedImageUrls),
-      },
+      }),
       { method: "post" },
     );
-  }, [canGenerate, prompt, selectedColors, selectedArtist, productType.id, fetcher, uploadedImageUrls]);
+  }, [canGenerate, productType.id, buildFetcherPayload, fetcher, design]);
 
   const handleRegenerate = useCallback(() => {
     if (!savedProductId || isLoading) return;
 
-    let fullPrompt = prompt.trim();
-    if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
-    if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
-
     setSelectedImageIdx(0);
     setEditInstruction("");
     setFirestoreDocId(null);
     design.reset();
 
     fetcher.submit(
-      {
+      buildFetcherPayload({
         intent: "regenerate",
         parentProductId: savedProductId,
-        prompt: fullPrompt,
-        colors: selectedColors || "",
-        artist: selectedArtist || "",
-        inspirationImageUrls: JSON.stringify(uploadedImageUrls),
-      },
+      }),
       { method: "post" },
     );
-  }, [savedProductId, isLoading, prompt, selectedColors, selectedArtist, fetcher, uploadedImageUrls]);
+  }, [savedProductId, isLoading, buildFetcherPayload, fetcher, design]);
+
+  const handlePromptBarGenerate = useCallback(() => {
+    if (hasResults) {
+      handleRegenerate();
+    } else {
+      handleGenerate();
+    }
+  }, [hasResults, handleGenerate, handleRegenerate]);
 
   const handleInspirationUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,8 +417,8 @@ export default function PromptDesign() {
     [arcadeAccountId, firebaseCustomToken, uploadedImageUrls.length],
   );
 
-  const handleRemoveInspiration = useCallback((idx: number) => {
-    setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
+  const handleClearReference = useCallback(() => {
+    setUploadedImageUrls([]);
   }, []);
 
   const canEdit =
@@ -382,33 +449,126 @@ export default function PromptDesign() {
         backLabel="Back to Categories"
         onBack={() => navigate(`/app/categories/${productType.category.slug}`)}
       >
-        {/* Prompt card */}
-        <div className="flex flex-col gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card">
-          <textarea
-            className="w-full min-h-40 border-none outline-none resize-y text-[15px] leading-relaxed text-primary bg-transparent p-0"
-            placeholder={`Describe your ${productType.name.toLowerCase()} design...\n\nFor example: "A floral pattern with soft peonies and eucalyptus leaves, hand-painted feel, light cream background"`}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+        <div className="flex flex-col gap-4 pb-[min(40vh,24rem)] sm:pb-40">
+          {isLoading && (
+            <LoadingCard
+              title={`Generating your ${productType.name.toLowerCase()} design…`}
+              subtitle="This usually takes 10–15 seconds"
+            />
+          )}
 
-          <hr className="w-full h-px bg-surface-muted border-none m-0" />
+          {generationFailed && <ErrorBanner message={errorMessage} />}
+          {uploadError && <ErrorBanner message={uploadError} />}
 
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border bg-gold-pale border-gold-border text-gold-dark text-[13px] font-medium">
-              <LayoutGrid className="size-3.5" />
-              {productType.category.name}
+          {hasResults && !isLoading && (
+            <div className="flex flex-col gap-4">
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
+                <img
+                  src={mainImage}
+                  alt="Generated design"
+                  className="size-full object-cover"
+                />
+              </div>
+
+              {generatedImages.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto">
+                  {generatedImages.map((url, idx) => (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => setSelectedImageIdx(idx)}
+                      className={`size-[72px] shrink-0 rounded-lg p-0 cursor-pointer overflow-hidden bg-surface-muted border-2 ${
+                        idx === selectedImageIdx
+                          ? "border-gold"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <img
+                        src={url}
+                        alt={`Variation ${idx + 1}`}
+                        className="size-full object-cover block"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
+                    value={editInstruction}
+                    onChange={(e) => setEditInstruction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canEdit) handleEdit();
+                    }}
+                    className="flex-1 h-10 px-3 rounded-lg border border-card-border bg-transparent text-sm text-primary outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    disabled={!canEdit}
+                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Pencil className="size-3.5" />
+                    Edit Design
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/app/design/${savedProductId}/pricing`)
+                  }
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer"
+                >
+                  Continue to Pricing
+                  <ArrowRight className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/app/categories/${productType.category.slug}`)
+                  }
+                  className="h-10 px-4 rounded-lg border border-card-border bg-card text-secondary text-sm font-medium cursor-pointer"
+                >
+                  Start Over
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </PageShell>
+
+      <CreationPromptBar
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        typewriterHints={typewriterHints}
+        referencePreviewUrl={referencePreviewUrl}
+        referenceLabel={referenceLabel}
+        onClearReference={handleClearReference}
+        inspirationColors={inspirationColors}
+        onInspirationColorsChange={setInspirationColors}
+        filterSlot={
+          <>
+            <div className="inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border border-gold-border bg-gold-pale px-3.5 text-[13px] font-semibold text-gold-dark shadow-[0_1px_0_rgba(15,15,15,0.04)]">
+              <LayoutGrid className="size-3.5 shrink-0" />
+              <span className="max-w-[9rem] truncate sm:max-w-[12rem]">
+                {productType.category.name}
+              </span>
             </div>
 
-            <ChipDropdown
-              icon={<Palette className="size-3.5" />}
-              label="Colors"
-              value={selectedColors}
-              options={COLOR_OPTIONS}
-              onSelect={setSelectedColors}
+            <InspirationColorsTrigger
+              selectedColors={inspirationColors}
+              onColorsChange={setInspirationColors}
+              disabled={isLoading}
             />
 
             <ChipDropdown
-              icon={<Sparkles className="size-3.5" />}
+              icon={<Sparkles className="size-3.5 shrink-0" />}
               label="Artist"
               value={selectedArtist}
               options={ARTIST_STYLES}
@@ -416,22 +576,24 @@ export default function PromptDesign() {
             />
 
             <label
-              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border text-[13px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 h-9 min-h-9 max-w-[12rem] shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] transition-[background-color,border-color,color,box-shadow] sm:max-w-[14rem] ${
                 uploadedImageUrls.length > 0
-                  ? "bg-gold-pale border-gold-border text-gold-dark"
-                  : "bg-card border-card-border text-primary"
-              } ${canUploadMore ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+                  ? "border-gold-border bg-gold-pale text-gold-dark"
+                  : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
+              } ${canUploadMore ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
             >
               {isUploading ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
               ) : (
-                <ImageIcon className="size-3.5" />
+                <ImageIcon className="size-3.5 shrink-0" />
               )}
-              {isUploading
-                ? "Uploading…"
-                : uploadedImageUrls.length > 0
-                  ? `Image (${uploadedImageUrls.length}/${MAX_INSPIRATION_IMAGES})`
-                  : "Image"}
+              <span className="min-w-0 truncate">
+                {isUploading
+                  ? "Uploading…"
+                  : uploadedImageUrls.length > 0
+                    ? `Image (${uploadedImageUrls.length}/${MAX_INSPIRATION_IMAGES})`
+                    : "Image"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
@@ -440,142 +602,13 @@ export default function PromptDesign() {
                 onChange={handleInspirationUpload}
               />
             </label>
-          </div>
-
-          {uploadedImageUrls.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {uploadedImageUrls.map((url, idx) => (
-                <div
-                  key={url}
-                  className="relative size-16 rounded-lg overflow-hidden border border-card-border bg-surface-muted"
-                >
-                  <img
-                    src={url}
-                    alt={`Inspiration ${idx + 1}`}
-                    className="size-full object-cover block"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveInspiration(idx)}
-                    aria-label={`Remove inspiration image ${idx + 1}`}
-                    className="absolute top-1 right-1 inline-flex items-center justify-center size-5 rounded-full border-none bg-black/60 text-white cursor-pointer"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {uploadError && <ErrorBanner message={uploadError} />}
-
-          <div className="flex justify-end items-center">
-            <button
-              type="button"
-              onClick={hasResults ? handleRegenerate : handleGenerate}
-              disabled={!canGenerate}
-              className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="size-4" />
-              {isLoading
-                ? "Generating..."
-                : hasResults
-                  ? "Regenerate"
-                  : "Generate"}
-            </button>
-          </div>
-        </div>
-
-        {isLoading && (
-          <LoadingCard
-            title={`Generating your ${productType.name.toLowerCase()} design…`}
-            subtitle="This usually takes 10–15 seconds"
-          />
-        )}
-
-        {generationFailed && <ErrorBanner message={errorMessage} />}
-
-        {hasResults && !isLoading && (
-          <div className="flex flex-col gap-4">
-            <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
-              <img
-                src={mainImage}
-                alt="Generated design"
-                className="size-full object-cover"
-              />
-            </div>
-
-            {generatedImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {generatedImages.map((url, idx) => (
-                  <button
-                    key={url}
-                    type="button"
-                    onClick={() => setSelectedImageIdx(idx)}
-                    className={`size-[72px] shrink-0 rounded-lg p-0 cursor-pointer overflow-hidden bg-surface-muted border-2 ${
-                      idx === selectedImageIdx
-                        ? "border-gold"
-                        : "border-transparent"
-                    }`}
-                  >
-                    <img
-                      src={url}
-                      alt={`Variation ${idx + 1}`}
-                      className="size-full object-cover block"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
-              <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
-                  value={editInstruction}
-                  onChange={(e) => setEditInstruction(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && canEdit) handleEdit();
-                  }}
-                  className="flex-1 h-10 px-3 rounded-lg border border-card-border bg-transparent text-sm text-primary outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  disabled={!canEdit}
-                  className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Pencil className="size-3.5" />
-                  Edit Design
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/app/design/${savedProductId}/pricing`)
-                }
-                className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer"
-              >
-                Continue to Pricing
-                <ArrowRight className="size-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/app/categories/${productType.category.slug}`)
-                }
-                className="h-10 px-4 rounded-lg border border-card-border bg-card text-secondary text-sm font-medium cursor-pointer"
-              >
-                Start Over
-              </button>
-            </div>
-          </div>
-        )}
-      </PageShell>
+          </>
+        }
+        onGenerate={handlePromptBarGenerate}
+        canGenerate={canGenerate}
+        isGenerating={isLoading}
+        hasResults={hasResults}
+      />
     </AppPage>
   );
 }
