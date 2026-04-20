@@ -12,6 +12,8 @@
     "docker-start": "npm run setup && npm run start",
     "setup": "prisma generate && prisma migrate deploy",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
@@ -50,7 +52,8 @@
     "prisma": "^6.2.1",
     "tsx": "^4.7.0",
     "typescript": "^5.2.2",
-    "vite": "^6.2.2"
+    "vite": "^6.2.2",
+    "vitest": "^4.1.4"
   },
   "workspaces": {
     "packages": [
