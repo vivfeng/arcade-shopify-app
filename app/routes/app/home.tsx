@@ -77,7 +77,7 @@ export default function Home() {
             />
           </div>
 
-          <h1 className="font-display text-3xl! font-medium leading-tight tracking-tight text-primary sm:text-[44px]">
+          <h1 className="font-display text-3xl! font-medium leading-[1.08] tracking-[-0.03em] text-primary sm:text-[44px]">
             Turn thoughts into things
           </h1>
 
