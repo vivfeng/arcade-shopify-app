@@ -10,10 +10,14 @@ import {
   TextField,
 } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import polarisArcade from "../../polaris-arcade.css?url";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./login.error.server";
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+export const links = () => [
+  { rel: "stylesheet", href: polarisStyles },
+  { rel: "stylesheet", href: polarisArcade },
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const errors = await login(request);
