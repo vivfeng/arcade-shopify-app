@@ -7,10 +7,10 @@ async function main() {
 
   // ─── Manufacturer ───
   const manufacturer = await db.manufacturer.upsert({
-    where: { id: "mfr-esme-textiles" },
+    where: { id: "294facb5-9ff1-4ae6-b1c6-e6e94cf64849" },
     update: {},
     create: {
-      id: "mfr-esme-textiles",
+      id: "294facb5-9ff1-4ae6-b1c6-e6e94cf64849",
       name: "Esme Textiles",
       capabilities: [
         "scarves",
@@ -28,6 +28,17 @@ async function main() {
         "lampshades",
       ],
       fulfillmentCapacity: 500,
+    },
+  });
+
+  await db.manufacturer.upsert({
+    where: { id: "5d25f996-396e-4e32-afa6-dd6a5c277281" },
+    update: {},
+    create: {
+      id: "5d25f996-396e-4e32-afa6-dd6a5c277281",
+      name: "Lattice and Loom",
+      capabilities: [],
+      fulfillmentCapacity: 0,
     },
   });
 
