@@ -3,12 +3,41 @@ import { Page } from "@shopify/polaris";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { requestDesignGeneration, resolveArcadeAccountId } from "../../../services/arcade/arcadeApi.server";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { PageShell } from "../../../components/layout/PageShell";
-import { Sparkles, Palette, Image, LayoutGrid, ArrowRight, Pencil } from "lucide-react";
+import { CreationPromptBar } from "../../../components/create/CreationPromptBar";
+import { InspirationColorsTrigger } from "../../../components/create/InspirationColorsTrigger";
+import type { CreateInspirationColor } from "../../../lib/inspirationColors";
+import { Image, LayoutGrid, ArrowRight, Pencil, Sparkles } from "lucide-react";
+
+const INSPIRATION_HEX_ITEM = /^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
+
+function parseInspirationHexCodesField(raw: string | null): string[] {
+  if (raw == null || raw.trim() === "") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const out: string[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string" && INSPIRATION_HEX_ITEM.test(item)) {
+        out.push(item);
+      }
+      if (out.length >= 3) {
+        break;
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -66,8 +95,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const colorsValue = (formData.get("colors") as string) || undefined;
-  const artistValue = (formData.get("artist") as string) || undefined;
+  const inspirationColorHexcodes = parseInspirationHexCodesField(
+    formData.get("inspirationColorHexes") as string | null,
+  );
 
   const productType = await db.productType.findUnique({
     where: { id: productTypeId },
@@ -82,7 +112,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let generationId: string | null = null;
 
   try {
-    const generation = await requestDesignGeneration({ prompt }, arcadeAccountId);
+    const generation = await requestDesignGeneration(
+      {
+        prompt,
+        ...(inspirationColorHexcodes.length > 0
+          ? { inspirationColorHexcodes }
+          : {}),
+      },
+      arcadeAccountId,
+    );
     arcadeDocumentId = generation.firestoreDocumentId;
     generationId = generation.dreamId ?? null;
   } catch (err) {
@@ -115,7 +153,7 @@ function ChipDropdown({
   options,
   onSelect,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string | null;
   options: string[];
@@ -127,10 +165,10 @@ function ChipDropdown({
     <div className="relative">
       <button
         type="button"
-        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border cursor-pointer text-[13px] font-medium transition-colors ${
+        className={`inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
           value
             ? "bg-gold-pale border-gold-border text-gold-dark"
-            : "bg-card border-card-border text-primary"
+            : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
         }`}
         onClick={() => setOpen(!open)}
       >
@@ -171,17 +209,6 @@ const ARTIST_STYLES = [
   "Art Deco",
 ];
 
-const COLOR_OPTIONS = [
-  "Warm Neutrals",
-  "Cool Blues",
-  "Earth Tones",
-  "Pastels",
-  "Bold & Vibrant",
-  "Monochrome",
-  "Sunset",
-  "Forest Green",
-];
-
 export default function PromptDesign() {
   const { productType } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
@@ -193,7 +220,9 @@ export default function PromptDesign() {
   }>();
 
   const [prompt, setPrompt] = useState("");
-  const [selectedColors, setSelectedColors] = useState<string | null>(null);
+  const [inspirationColors, setInspirationColors] = useState<CreateInspirationColor[]>(
+    [],
+  );
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
@@ -201,6 +230,28 @@ export default function PromptDesign() {
 
   const [firestoreDocId, setFirestoreDocId] = useState<string | null>(null);
   const design = useDesignGeneration(firestoreDocId);
+
+  const referencePreviewUrl = useMemo(
+    () => (referenceImage ? URL.createObjectURL(referenceImage) : null),
+    [referenceImage],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (referencePreviewUrl) {
+        URL.revokeObjectURL(referencePreviewUrl);
+      }
+    };
+  }, [referencePreviewUrl]);
+
+  const typewriterHints = useMemo(
+    () => [
+      `Create a ${productType.name.toLowerCase()} with soft botanical motifs…`,
+      `Design ${productType.name.toLowerCase()} in warm earth tones and a hand-painted feel…`,
+      `Make a bold geometric ${productType.name.toLowerCase()} for a modern space…`,
+    ],
+    [productType.name],
+  );
 
   useEffect(() => {
     if (fetcher.data?.arcadeDocumentId) {
@@ -225,7 +276,6 @@ export default function PromptDesign() {
     if (!canGenerate) return;
 
     let fullPrompt = prompt.trim();
-    if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
     if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
 
     setSelectedImageIdx(0);
@@ -238,18 +288,19 @@ export default function PromptDesign() {
         intent: "generate",
         prompt: fullPrompt,
         productTypeId: productType.id,
-        colors: selectedColors || "",
         artist: selectedArtist || "",
+        inspirationColorHexes: JSON.stringify(
+          inspirationColors.map((color) => color.hex),
+        ),
       },
       { method: "post" },
     );
-  }, [canGenerate, prompt, selectedColors, selectedArtist, productType.id, fetcher]);
+  }, [canGenerate, prompt, inspirationColors, selectedArtist, productType.id, fetcher]);
 
   const handleRegenerate = useCallback(() => {
     if (!savedProductId || isLoading) return;
 
     let fullPrompt = prompt.trim();
-    if (selectedColors) fullPrompt += `\nColors: ${selectedColors}`;
     if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
 
     setSelectedImageIdx(0);
@@ -262,12 +313,14 @@ export default function PromptDesign() {
         intent: "regenerate",
         parentProductId: savedProductId,
         prompt: fullPrompt,
-        colors: selectedColors || "",
         artist: selectedArtist || "",
+        inspirationColorHexes: JSON.stringify(
+          inspirationColors.map((color) => color.hex),
+        ),
       },
       { method: "post" },
     );
-  }, [savedProductId, isSubmitting, prompt, selectedColors, selectedArtist, fetcher]);
+  }, [savedProductId, isSubmitting, prompt, inspirationColors, selectedArtist, fetcher]);
 
   const canEdit =
     editInstruction.trim().length > 0 && savedProductId != null && !isLoading;
@@ -289,6 +342,14 @@ export default function PromptDesign() {
     setEditInstruction("");
   }, [canEdit, savedProductId, editInstruction, fetcher]);
 
+  const handlePromptBarGenerate = useCallback(() => {
+    if (hasResults) {
+      handleRegenerate();
+    } else {
+      handleGenerate();
+    }
+  }, [hasResults, handleRegenerate, handleGenerate]);
+
   return (
     <Page>
       <PageShell
@@ -296,35 +357,135 @@ export default function PromptDesign() {
         subtitle="Describe your design and let AI create it for you"
         backLabel="Back to Categories"
         onBack={() => navigate(`/app/categories/${productType.category.slug}`)}
-        maxWidth={640}
+        maxWidth={720}
       >
-        {/* Prompt card */}
-        <div className="flex flex-col gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card">
-          <textarea
-            className="w-full min-h-40 border-none outline-none resize-y text-[15px] leading-relaxed text-primary bg-transparent p-0"
-            placeholder={`Describe your ${productType.name.toLowerCase()} design...\n\nFor example: "A floral pattern with soft peonies and eucalyptus leaves, hand-painted feel, light cream background"`}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+        <div className="flex flex-col gap-4 pb-[min(40vh,24rem)] sm:pb-40">
+          {isLoading && (
+            <LoadingCard
+              title={`Generating your ${productType.name.toLowerCase()} design…`}
+              subtitle="This usually takes 10–15 seconds"
+            />
+          )}
 
-          <hr className="w-full h-px bg-surface-muted border-none m-0" />
+          {generationFailed && (
+            <ErrorBanner
+              message={
+                design.error
+                  ? `Design generation failed: ${design.error}`
+                  : "Design generation didn't return images this time. Your prompt has been saved — try Regenerate in the prompt bar below."
+              }
+            />
+          )}
 
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border bg-gold-pale border-gold-border text-gold-dark text-[13px] font-medium">
-              <LayoutGrid className="size-3.5" />
-              {productType.category.name}
+          {hasResults && !isLoading && (
+            <div className="flex flex-col gap-4">
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
+                <img
+                  src={mainImage}
+                  alt="Generated design"
+                  className="size-full object-cover"
+                />
+              </div>
+
+              {generatedImages.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto">
+                  {generatedImages.map((url, idx) => (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => setSelectedImageIdx(idx)}
+                      className={`size-[72px] shrink-0 rounded-lg p-0 cursor-pointer overflow-hidden bg-surface-muted border-2 ${
+                        idx === selectedImageIdx
+                          ? "border-gold"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <img
+                        src={url}
+                        alt={`Variation ${idx + 1}`}
+                        className="size-full object-cover block"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
+                    value={editInstruction}
+                    onChange={(e) => setEditInstruction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canEdit) handleEdit();
+                    }}
+                    className="flex-1 h-10 px-3 rounded-lg border border-card-border bg-transparent text-sm text-primary outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    disabled={!canEdit}
+                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Pencil className="size-3.5" />
+                    Edit Design
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/app/design/${savedProductId}/pricing`)
+                  }
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer"
+                >
+                  Continue to Pricing
+                  <ArrowRight className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/app/categories/${productType.category.slug}`)
+                  }
+                  className="h-10 px-4 rounded-lg border border-card-border bg-card text-secondary text-sm font-medium cursor-pointer"
+                >
+                  Start Over
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </PageShell>
+
+      <CreationPromptBar
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        typewriterHints={typewriterHints}
+        referencePreviewUrl={referencePreviewUrl}
+        referenceLabel={referenceImage?.name ?? null}
+        onClearReference={() => setReferenceImage(null)}
+        inspirationColors={inspirationColors}
+        onInspirationColorsChange={setInspirationColors}
+        filterSlot={
+          <>
+            <div className="inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border border-gold-border bg-gold-pale px-3.5 text-[13px] font-semibold text-gold-dark shadow-[0_1px_0_rgba(15,15,15,0.04)]">
+              <LayoutGrid className="size-3.5 shrink-0" />
+              <span className="max-w-[9rem] truncate sm:max-w-[12rem]">
+                {productType.category.name}
+              </span>
             </div>
 
-            <ChipDropdown
-              icon={<Palette className="size-3.5" />}
-              label="Colors"
-              value={selectedColors}
-              options={COLOR_OPTIONS}
-              onSelect={setSelectedColors}
+            <InspirationColorsTrigger
+              selectedColors={inspirationColors}
+              onColorsChange={setInspirationColors}
+              disabled={isLoading}
             />
 
             <ChipDropdown
-              icon={<Sparkles className="size-3.5" />}
+              icon={<Sparkles className="size-3.5 shrink-0" />}
               label="Artist"
               value={selectedArtist}
               options={ARTIST_STYLES}
@@ -332,14 +493,16 @@ export default function PromptDesign() {
             />
 
             <label
-              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border cursor-pointer text-[13px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 h-9 min-h-9 max-w-[11rem] shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] cursor-pointer transition-[background-color,border-color,color,box-shadow] sm:max-w-[14rem] ${
                 referenceImage
-                  ? "bg-gold-pale border-gold-border text-gold-dark"
-                  : "bg-card border-card-border text-primary"
+                  ? "border-gold-border bg-gold-pale text-gold-dark"
+                  : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
               }`}
             >
-              <Image className="size-3.5" />
-              {referenceImage ? referenceImage.name : "Image"}
+              <Image className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate">
+                {referenceImage ? referenceImage.name : "Image"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
@@ -350,123 +513,13 @@ export default function PromptDesign() {
                 }}
               />
             </label>
-          </div>
-
-          <div className="flex justify-end items-center">
-            <button
-              type="button"
-              onClick={hasResults ? handleRegenerate : handleGenerate}
-              disabled={!canGenerate}
-              className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="size-4" />
-              {isLoading
-                ? "Generating..."
-                : hasResults
-                  ? "Regenerate"
-                  : "Generate"}
-            </button>
-          </div>
-        </div>
-
-        {isLoading && (
-          <LoadingCard
-            title={`Generating your ${productType.name.toLowerCase()} design…`}
-            subtitle="This usually takes 10–15 seconds"
-          />
-        )}
-
-        {generationFailed && (
-          <ErrorBanner
-            message={
-              design.error
-                ? `Design generation failed: ${design.error}`
-                : "Design generation didn't return images this time. Your prompt has been saved — try hitting Regenerate above."
-            }
-          />
-        )}
-
-        {hasResults && !isLoading && (
-          <div className="flex flex-col gap-4">
-            <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
-              <img
-                src={mainImage}
-                alt="Generated design"
-                className="size-full object-cover"
-              />
-            </div>
-
-            {generatedImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {generatedImages.map((url, idx) => (
-                  <button
-                    key={url}
-                    type="button"
-                    onClick={() => setSelectedImageIdx(idx)}
-                    className={`size-[72px] shrink-0 rounded-lg p-0 cursor-pointer overflow-hidden bg-surface-muted border-2 ${
-                      idx === selectedImageIdx
-                        ? "border-gold"
-                        : "border-transparent"
-                    }`}
-                  >
-                    <img
-                      src={url}
-                      alt={`Variation ${idx + 1}`}
-                      className="size-full object-cover block"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
-              <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
-                  value={editInstruction}
-                  onChange={(e) => setEditInstruction(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && canEdit) handleEdit();
-                  }}
-                  className="flex-1 h-10 px-3 rounded-lg border border-card-border bg-transparent text-sm text-primary outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  disabled={!canEdit}
-                  className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Pencil className="size-3.5" />
-                  Edit Design
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/app/design/${savedProductId}/pricing`)
-                }
-                className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer"
-              >
-                Continue to Pricing
-                <ArrowRight className="size-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/app/categories/${productType.category.slug}`)
-                }
-                className="h-10 px-4 rounded-lg border border-card-border bg-card text-secondary text-sm font-medium cursor-pointer"
-              >
-                Start Over
-              </button>
-            </div>
-          </div>
-        )}
-      </PageShell>
+          </>
+        }
+        onGenerate={handlePromptBarGenerate}
+        canGenerate={canGenerate}
+        isGenerating={isLoading}
+        hasResults={hasResults}
+      />
     </Page>
   );
 }

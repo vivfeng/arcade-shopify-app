@@ -6,11 +6,15 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import polarisArcade from "../../polaris-arcade.css?url";
 import { authenticate } from "../../shopify.server";
 import { ensureShopRecord } from "../../services/arcade/arcadeAuth.server";
 import { env } from "../../lib/env/env.server";
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+export const links = () => [
+  { rel: "stylesheet", href: polarisStyles },
+  { rel: "stylesheet", href: polarisArcade },
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
