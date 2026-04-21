@@ -24,7 +24,7 @@ export function PageShell({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 text-[26px] font-bold text-primary tracking-tight leading-[28.6px]">
+        <h1 className="m-0 font-display text-[26px] font-semibold tracking-[-0.03em] text-primary leading-[1.08]">
           {heading}
         </h1>
         {subtitle && <p className="m-0 text-sm text-subdued">{subtitle}</p>}

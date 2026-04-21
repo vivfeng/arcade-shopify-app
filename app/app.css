@@ -158,36 +158,95 @@
   --font-display: "Recoleta", ui-serif, Georgia, serif;
   --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-page: #f7f4f0;
-  --color-card: #ffffff;
-  --color-card-border: #deddd5;
-  --color-card-border-soft: #e1dfdb;
-  --color-card-border-hover: #c5c2bc;
-  --color-surface-muted: #e9e5d8;
+  /* HSL values match apps/arcade-lab/src/styles/globals.css */
+  --color-fog: hsl(34 30% 95%);
+  --color-paper: hsl(53 12% 85%);
+  --color-linen: hsl(46 28% 88%);
+  --color-steel: hsl(0 0% 62%);
+  --color-mud: hsl(48 2% 40%);
+  --color-stone: hsl(36 8% 25%);
+  --color-ink: hsl(0 0% 6%);
+  --color-sand: hsl(53 66% 86%);
+  --color-fluo: hsl(61 100% 74%);
+  --color-amber: hsl(41 52% 57%);
+  --color-clay: hsl(50 30% 46%);
+  --color-iris: hsl(244 33% 74%);
 
-  --color-primary: #0f0f0f;
-  --color-secondary: #45413b;
-  --color-subdued: #696864;
+  --color-page: hsl(34 30% 95%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-border: hsl(53 12% 85%);
+  --color-card-border-soft: hsl(46 20% 90%);
+  --color-card-border-hover: hsl(0 0% 62%);
+  --color-surface-muted: hsl(46 28% 88%);
 
-  --color-gold: #988c52;
-  --color-gold-dark: #6b6339;
-  --color-gold-pale: #f3eec5;
-  --color-gold-border: #d4ce9e;
+  --color-primary: hsl(0 0% 6%);
+  --color-secondary: hsl(36 8% 25%);
+  --color-subdued: hsl(48 2% 40%);
 
-  --color-success-bg: #e8f8ed;
-  --color-success-fg: #2ca84f;
+  --color-gold: hsl(50 30% 46%);
+  --color-gold-dark: hsl(50 28% 32%);
+  --color-gold-pale: hsl(53 66% 86%);
+  --color-gold-border: hsl(50 35% 72%);
 
-  --color-accent: #fcff7b;
+  --color-success-bg: hsl(137 45% 94%);
+  --color-success-fg: hsl(137 58% 42%);
+  --color-caution: hsl(24 86% 52%);
+  --color-warning: hsl(3 85% 57%);
 
-  --shadow-card: 0px 1px 4px 0px rgba(0, 0, 0, 0.06);
-  --shadow-dropdown: 0px 4px 12px rgba(0, 0, 0, 0.1);
+  --color-accent: hsl(61 100% 74%);
+
+  --radius-field: 0.9375rem;
+  --radius-panel: 1rem;
+  --radius-pill: 9999px;
+
+  --shadow-card: 0 0 0 1px rgba(69, 65, 59, 0.06),
+    0 8px 18px rgba(15, 15, 15, 0.05);
+  --shadow-dropdown: 0 0 0 1px rgba(69, 65, 59, 0.06),
+    0 16px 36px rgba(15, 15, 15, 0.08);
 }
 
 @layer base {
+  :root {
+    --font-interface-stack: var(--font-sans);
+    --font-display-stack: var(--font-display);
+  }
+
+  *::selection {
+    background: hsl(61 100% 74% / 0.3);
+    color: hsl(0 0% 6%);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--color-page);
+  }
+
   body {
-    font-family: var(--font-sans);
+    font-family: var(--font-interface-stack);
+    font-size: 0.9375rem;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display-stack);
+    letter-spacing: -0.03em;
+    font-weight: 400;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display-stack);
+    letter-spacing: -0.02em;
+    font-weight: 400;
   }
 }
 
