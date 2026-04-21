@@ -29,6 +29,76 @@ export function evictTokenCache(arcadeAccountId: string): void {
   tokenCache.delete(arcadeAccountId);
 }
 
+export const LINK_CONFLICT_MESSAGE =
+  "You have already connected another account to this Shopify store. Please reach out for help at cs@arcade.ai.";
+
+export class LinkShopConflictError extends Error {
+  readonly code = "LINK_SHOP_CONFLICT" as const;
+  constructor() {
+    super(LINK_CONFLICT_MESSAGE);
+    this.name = "LinkShopConflictError";
+  }
+}
+
+export async function getArcadeAccountIdForShop(
+  shopDomain: string,
+): Promise<string | null> {
+  const shop = await db.shop.findUnique({
+    where: { domain: shopDomain },
+    select: { arcadeAccountId: true },
+  });
+  return shop?.arcadeAccountId ?? null;
+}
+
+export async function requireArcadeAccountIdForApi(
+  shopDomain: string,
+): Promise<string> {
+  const id = await getArcadeAccountIdForShop(shopDomain);
+  if (!id) {
+    throw new Error(
+      "[ArcadeAuth] This shop has no linked Arcade account. Complete Connect Arcade first.",
+    );
+  }
+  return id;
+}
+
+/**
+ * First-time link: sets Firebase UID on the shop after client sign-in / sign-up.
+ * Re-linking a different account is not allowed (CS must intervene).
+ */
+export async function linkShopToArcadeAccount(params: {
+  shopDomain: string;
+  idToken: string;
+}): Promise<void> {
+  const decoded = await getFirebaseAdmin().auth().verifyIdToken(params.idToken);
+  const uid = decoded.uid;
+
+  const shop = await db.shop.findUnique({
+    where: { domain: params.shopDomain },
+    select: { id: true, arcadeAccountId: true },
+  });
+
+  if (!shop) {
+    throw new Error(`[ArcadeAuth] No Shop record for ${params.shopDomain}`);
+  }
+
+  if (shop.arcadeAccountId && shop.arcadeAccountId !== uid) {
+    throw new LinkShopConflictError();
+  }
+
+  if (shop.arcadeAccountId === uid) {
+    return;
+  }
+
+  await db.shop.update({
+    where: { id: shop.id },
+    data: {
+      arcadeAccountId: uid,
+      arcadeLinkedAt: new Date(),
+    },
+  });
+}
+
 interface AdminGraphql {
   (query: string, options?: { variables?: Record<string, unknown> }): Promise<Response>;
 }

@@ -11,6 +11,7 @@ export default [
 
   ...prefix("app", [
     layout("./routes/app/layout.tsx", [
+      route("connect-arcade", "./routes/app/connect-arcade.tsx"),
       index("./routes/app/home.tsx"),
       route("orders", "./routes/app/orders.tsx"),
       ...prefix("categories", [
@@ -26,11 +27,12 @@ export default [
   ]),
 
   ...prefix("auth", [
-    route("*", "./routes/auth/$.tsx"),
     route("login", "./routes/auth/login.tsx"),
+    route("*", "./routes/auth/$.tsx"),
   ]),
 
   ...prefix("webhooks", [
+    route("products/update", "./routes/webhooks/products-update.tsx"),
     route("app/uninstalled", "./routes/webhooks/app-uninstalled.tsx"),
     route("app/scopes-update", "./routes/webhooks/app-scopes-update.tsx"),
     route(

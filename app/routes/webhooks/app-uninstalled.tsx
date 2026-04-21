@@ -26,7 +26,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     await db.shop.update({
       where: { domain: shop },
-      data: { uninstalledAt: new Date() },
+      data: {
+        uninstalledAt: new Date(),
+        arcadeAccountId: null,
+        arcadeLinkedAt: null,
+      },
     });
   } catch (error) {
     if (

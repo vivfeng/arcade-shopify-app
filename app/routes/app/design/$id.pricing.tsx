@@ -13,7 +13,11 @@ import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { formatPrice } from "../../../lib/format";
 import { publishToShopify } from "../../../services/shopify/shopifyPublish.server";
-import { useState, useCallback } from "react";
+import {
+  enforceVariantRetailForChannel,
+  markupPercentFromRetail,
+} from "../../../lib/channelPricing";
+import { useState, useCallback, useEffect } from "react";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { PageShell } from "../../../components/layout/PageShell";
@@ -34,6 +38,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       status: true,
       imageUrls: true,
       shopifyProductGid: true,
+      commissionRatePercent: true,
       productType: {
         select: {
           id: true,
@@ -115,6 +120,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       status: product.status,
       imageUrls,
       productTypeName: product.productType.name,
+      commissionRatePercent: Number(product.commissionRatePercent),
     },
     variants: variants.map((v) => ({
       id: v.id,
@@ -149,7 +155,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           shop: { domain: session.shop },
         },
       },
-      select: { productCost: true },
+      select: {
+        productCost: true,
+        arcadeProduct: { select: { commissionRatePercent: true } },
+      },
     });
 
     if (!variant) {
@@ -157,12 +166,21 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
 
     const cost = Number(variant.productCost);
-    const markupPercent =
-      cost > 0 ? Math.round(((retailPrice - cost) / cost) * 10000) / 100 : 0;
+    const rate = Number(variant.arcadeProduct.commissionRatePercent);
+    const enforced = enforceVariantRetailForChannel({
+      productCost: cost,
+      retailPrice,
+      commissionRatePercent: rate,
+    });
+
+    const markupPercent = markupPercentFromRetail(cost, enforced.retailPrice);
 
     const updated = await db.productVariant.update({
       where: { id: variantId },
-      data: { retailPrice, markupPercent },
+      data: {
+        retailPrice: enforced.retailPrice,
+        markupPercent,
+      },
       select: {
         id: true,
         size: true,
@@ -182,6 +200,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         retailPrice: Number(updated.retailPrice),
         markupPercent: Number(updated.markupPercent),
       },
+      pricingMessage: enforced.message,
     });
   }
 
@@ -198,11 +217,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         status: true,
         imageUrls: true,
         shopifyProductGid: true,
+        commissionRatePercent: true,
         productType: { select: { name: true } },
         variants: {
           select: {
+            id: true,
             size: true,
             fabric: true,
+            productCost: true,
             retailPrice: true,
           },
         },
@@ -234,6 +256,31 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
+    const rate = Number(product.commissionRatePercent);
+    for (const v of product.variants) {
+      const cost = Number(v.productCost);
+      const enforced = enforceVariantRetailForChannel({
+        productCost: cost,
+        retailPrice: Number(v.retailPrice),
+        commissionRatePercent: rate,
+      });
+      if (enforced.wasAdjusted) {
+        await db.productVariant.update({
+          where: { id: v.id },
+          data: {
+            retailPrice: enforced.retailPrice,
+            markupPercent: markupPercentFromRetail(cost, enforced.retailPrice),
+          },
+        });
+      }
+    }
+
+    const variantsForPublish = await db.productVariant.findMany({
+      where: { arcadeProductId: product.id },
+      select: { size: true, fabric: true, retailPrice: true },
+      orderBy: [{ size: "asc" }, { fabric: "asc" }],
+    });
+
     await db.arcadeProduct.update({
       where: { id: product.id },
       data: { status: "PUBLISHING" },
@@ -246,7 +293,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         productTypeName: product.productType.name,
         vendor: "Arcade",
         imageUrls,
-        variants: product.variants.map((v) => ({
+        variants: variantsForPublish.map((v) => ({
           size: v.size,
           fabric: v.fabric,
           retailPrice: String(v.retailPrice),
@@ -286,7 +333,18 @@ export default function PricingReview() {
   const navigate = useNavigate();
 
   const publishFetcher = useFetcher<{ error?: string }>();
-  const priceFetcher = useFetcher();
+  const priceFetcher = useFetcher<{
+    error?: string;
+    pricingMessage?: string;
+    variant?: {
+      id: string;
+      size: string;
+      fabric: string;
+      productCost: number;
+      retailPrice: number;
+      markupPercent: number;
+    };
+  }>();
 
   const [variants, setVariants] = useState(initialVariants);
 
@@ -295,6 +353,11 @@ export default function PricingReview() {
   const publishError =
     publishFetcher.data && "error" in publishFetcher.data
       ? publishFetcher.data.error
+      : null;
+
+  const priceAdjustMessage =
+    priceFetcher.data && "pricingMessage" in priceFetcher.data
+      ? priceFetcher.data.pricingMessage
       : null;
 
   const handlePriceChange = useCallback(
@@ -327,6 +390,14 @@ export default function PricingReview() {
     [priceFetcher],
   );
 
+  useEffect(() => {
+    const v = priceFetcher.data?.variant;
+    if (!v) return;
+    setVariants((prev) =>
+      prev.map((row) => (row.id === v.id ? { ...v } : row)),
+    );
+  }, [priceFetcher.data]);
+
   const handlePublish = useCallback(() => {
     if (isPublishing) return;
     publishFetcher.submit({ intent: "publish" }, { method: "post" });
@@ -341,6 +412,7 @@ export default function PricingReview() {
         onBack={() => navigate(-1)}
       >
         {publishError && <ErrorBanner message={publishError} />}
+        {priceAdjustMessage && <ErrorBanner message={priceAdjustMessage} />}
 
         {isPublishing && (
           <LoadingCard
