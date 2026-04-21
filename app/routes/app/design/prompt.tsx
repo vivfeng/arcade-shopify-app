@@ -1,8 +1,22 @@
-import { data, type LoaderFunctionArgs, type ActionFunctionArgs, useLoaderData, useNavigate, useFetcher } from "react-router";
+import {
+  data,
+  redirect,
+  type LoaderFunctionArgs,
+  type ActionFunctionArgs,
+  useLoaderData,
+  useNavigate,
+  useFetcher,
+} from "react-router";
 import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
-import { createClientAuthToken, requestDesignGeneration, resolveArcadeAccountId } from "../../../services/arcade/arcadeApi.server";
+import {
+  createClientAuthToken,
+  getArcadeAccountIdForShop,
+  requestDesignGeneration,
+  requireArcadeAccountIdForApi,
+} from "../../../services/arcade/arcadeApi.server";
+import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
 import { useState, useCallback, useEffect } from "react";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
 import { uploadInspirationImage } from "../../../services/firebase/storage";
@@ -49,7 +63,7 @@ function parseInspirationImageUrls(raw: FormDataEntryValue | null): string[] | u
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const typeSlug = url.searchParams.get("type");
@@ -66,6 +80,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       slug: true,
       specs: true,
       basePrice: true,
+      manufacturerId: true,
       category: { select: { id: true, name: true, slug: true } },
     },
   });
@@ -74,10 +89,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Product type not found", { status: 404 });
   }
 
-  const arcadeAccountId = await resolveArcadeAccountId(session.shop, admin.graphql);
-  const firebaseCustomToken = await createClientAuthToken(arcadeAccountId);
+  if (!isAllowedShopifyManufacturerId(productType.manufacturerId)) {
+    throw new Response("This product type is not available for Shopify.", {
+      status: 403,
+    });
+  }
 
-  return data({ productType, arcadeAccountId, firebaseCustomToken });
+  const linkedAccountId = await getArcadeAccountIdForShop(session.shop);
+  if (!linkedAccountId) {
+    throw redirect("/app/connect-arcade");
+  }
+
+  const firebaseCustomToken = await createClientAuthToken(linkedAccountId);
+
+  return data({
+    productType,
+    arcadeAccountId: linkedAccountId,
+    firebaseCustomToken,
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -140,7 +169,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
-  const arcadeAccountId = await resolveArcadeAccountId(session.shop, admin.graphql);
+  let arcadeAccountId: string;
+  try {
+    arcadeAccountId = await requireArcadeAccountIdForApi(session.shop);
+  } catch {
+    return data(
+      {
+        error:
+          "Connect your Arcade account before generating designs. Open Connect Arcade from the app menu.",
+      },
+      { status: 401 },
+    );
+  }
 
   const inspirationImageUrls = parseInspirationImageUrls(
     formData.get("inspirationImageUrls"),

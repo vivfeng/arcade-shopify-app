@@ -3,6 +3,7 @@ import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
 import { formatPrice } from "../../../lib/format";
+import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
 import { PageShell } from "../../../components/layout/PageShell";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
@@ -24,6 +25,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
           specs: true,
           basePrice: true,
           imageUrl: true,
+          manufacturerId: true,
         },
         orderBy: { name: "asc" },
       },
@@ -36,10 +38,12 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
 
   const serialized = {
     ...category,
-    productTypes: category.productTypes.map((pt) => ({
-      ...pt,
-      basePrice: Number(pt.basePrice),
-    })),
+    productTypes: category.productTypes
+      .filter((pt) => isAllowedShopifyManufacturerId(pt.manufacturerId))
+      .map(({ manufacturerId: _mid, ...pt }) => ({
+        ...pt,
+        basePrice: Number(pt.basePrice),
+      })),
   };
 
   return data({ category: serialized });
