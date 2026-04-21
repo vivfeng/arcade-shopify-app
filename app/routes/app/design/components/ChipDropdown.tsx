@@ -15,22 +15,22 @@ export function ChipDropdown({
   }) {
     const [open, setOpen] = useState(false);
   
-    return (
-      <div className="relative">
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-2xl border cursor-pointer text-[13px] font-medium transition-colors ${
-            value
-              ? "bg-gold-pale border-gold-border text-gold-dark"
-              : "bg-card border-card-border text-primary"
-          }`}
-          onClick={() => setOpen(!open)}
-        >
-          {icon}
-          {value || label}
-        </button>
-        {open && (
-          <div className="absolute top-[calc(100%+4px)] left-0 min-w-[180px] rounded-lg border border-card-border bg-card py-1.5 shadow-dropdown z-10">
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        className={`inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
+          value
+            ? "bg-gold-pale border-gold-border text-gold-dark"
+            : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
+        }`}
+        onClick={() => setOpen(!open)}
+      >
+        {icon}
+        {value || label}
+      </button>
+      {open && (
+        <div className="absolute bottom-[calc(100%+8px)] left-0 min-w-[180px] rounded-lg border border-card-border bg-card py-1.5 shadow-dropdown z-[120]">
             {options.map((opt) => (
               <button
                 key={opt}
