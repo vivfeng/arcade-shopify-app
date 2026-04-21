@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+/* Instrument Sans */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/InstrumentSans/InstrumentSans-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/InstrumentSans/InstrumentSans-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/InstrumentSans/InstrumentSans-Bold.ttf") format("truetype");
+}
+
+/* Recoleta */
+@font-face {
+  font-family: "Recoleta";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Recoleta/recoleta-light.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Recoleta";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Recoleta/recoleta-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Recoleta";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Recoleta/recoleta-medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Recoleta";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Recoleta/recoleta-bold.woff2") format("woff2");
+}
+
+/* Roboto Mono */
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Thin.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 100;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-ThinItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-ExtraLight.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 200;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-ExtraLightItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Light.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-LightItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-MediumItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-SemiBoldItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/RobotoMono/RobotoMono-BoldItalic.ttf") format("truetype");
+}
+
+@theme {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Recoleta", ui-serif, Georgia, serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-page: #f7f4f0;
+  --color-card: #ffffff;
+  --color-card-border: #deddd5;
+  --color-card-border-soft: #e1dfdb;
+  --color-card-border-hover: #c5c2bc;
+  --color-surface-muted: #e9e5d8;
+
+  --color-primary: #0f0f0f;
+  --color-secondary: #45413b;
+  --color-subdued: #696864;
+
+  --color-gold: #988c52;
+  --color-gold-dark: #6b6339;
+  --color-gold-pale: #f3eec5;
+  --color-gold-border: #d4ce9e;
+
+  --color-success-bg: #e8f8ed;
+  --color-success-fg: #2ca84f;
+
+  --color-accent: #fcff7b;
+
+  --shadow-card: 0px 1px 4px 0px rgba(0, 0, 0, 0.06);
+  --shadow-dropdown: 0px 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Creation prompt bar — soft glow (Arcade Lab–inspired) */
+@keyframes creation-glow-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translate(12px, -8px) scale(1.05);
+    opacity: 0.65;
+  }
+  70% {
+    transform: translate(-8px, 6px) scale(0.97);
+    opacity: 0.4;
+  }
+}
+
+@keyframes creation-glow-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translate(-14px, 10px) scale(1.08);
+    opacity: 0.35;
+  }
+  80% {
+    transform: translate(10px, -6px) scale(0.95);
+    opacity: 0.6;
+  }
+}
+
+@keyframes creation-glow-3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate(8px, 12px) scale(1.06);
+    opacity: 0.7;
+  }
+}
