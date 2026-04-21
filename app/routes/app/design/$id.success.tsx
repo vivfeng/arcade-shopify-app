@@ -60,7 +60,7 @@ export function PublishSuccessCard({
           <CheckCircle className="size-7" />
         </div>
 
-        <h1 className="m-0 text-center font-display text-[28px] font-bold leading-[30.8px] tracking-tight text-primary">
+        <h1 className="m-0 text-center font-display text-[28px] font-semibold leading-[1.08] tracking-[-0.03em] text-primary">
           Product Published!
         </h1>
 
