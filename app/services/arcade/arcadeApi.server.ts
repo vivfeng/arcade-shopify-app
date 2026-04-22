@@ -13,7 +13,13 @@ import type {
   DesignDocument,
 } from "../../types/arcade";
 
-export { resolveArcadeAccountId } from "./arcadeAuth.server";
+export {
+  resolveArcadeAccountId,
+  createClientAuthToken,
+  getArcadeAccountIdForShop,
+  requireArcadeAccountIdForApi,
+  linkShopToArcadeAccount,
+} from "./arcadeAuth.server";
 
 export type {
   DesignGenerationRequest,
