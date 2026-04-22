@@ -1,22 +1,61 @@
-import { data, type LoaderFunctionArgs, type ActionFunctionArgs, useLoaderData, useNavigate, useFetcher } from "react-router";
-import { Page } from "@shopify/polaris";
+import {
+  data,
+  redirect,
+  type LoaderFunctionArgs,
+  type ActionFunctionArgs,
+  useLoaderData,
+  useNavigate,
+  useFetcher,
+} from "react-router";
+import { AppPage } from "../../../components/layout/AppPage";
 import { authenticate } from "../../../shopify.server";
 import db from "../../../db.server";
-import { requestDesignGeneration, resolveArcadeAccountId } from "../../../services/arcade/arcadeApi.server";
-import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import {
+  createClientAuthToken,
+  getArcadeAccountIdForShop,
+  requestDesignGeneration,
+  requireArcadeAccountIdForApi,
+} from "../../../services/arcade/arcadeApi.server";
+import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
+import { useCallback, useEffect, useState } from "react";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
+import { uploadInspirationImage } from "../../../services/firebase/storage";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { PageShell } from "../../../components/layout/PageShell";
 import { CreationPromptBar } from "../../../components/create/CreationPromptBar";
 import { InspirationColorsTrigger } from "../../../components/create/InspirationColorsTrigger";
 import type { CreateInspirationColor } from "../../../lib/inspirationColors";
-import { Image, LayoutGrid, ArrowRight, Pencil, Sparkles } from "lucide-react";
+import {
+  Image as ImageIcon,
+  LayoutGrid,
+  ArrowRight,
+  Pencil,
+  Sparkles,
+  Loader2,
+  X,
+} from "lucide-react";
+import { transformShopifyPrintedTextileDesignPrompt } from "../../../lib/shopifyDesignPromptTransform";
+import { ChipDropdown } from "./components";
+
+const MAX_INSPIRATION_IMAGES = 3;
+const ARTIST_STYLES = [
+  "Watercolor",
+  "Oil Painting",
+  "Minimalist",
+  "Abstract",
+  "Botanical",
+  "Geometric",
+  "Impressionist",
+  "Art Deco",
+];
 
 const INSPIRATION_HEX_ITEM = /^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
 
-function parseInspirationHexCodesField(raw: string | null): string[] {
-  if (raw == null || raw.trim() === "") {
+function parseInspirationHexCodesField(
+  raw: FormDataEntryValue | null,
+): string[] {
+  if (typeof raw !== "string" || raw.trim() === "") {
     return [];
   }
   try {
@@ -39,8 +78,24 @@ function parseInspirationHexCodesField(raw: string | null): string[] {
   }
 }
 
+function parseInspirationImageUrls(
+  raw: FormDataEntryValue | null,
+): string[] | undefined {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const urls = parsed.filter(
+      (u): u is string => typeof u === "string" && u.length > 0,
+    );
+    return urls.length > 0 ? urls : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const typeSlug = url.searchParams.get("type");
@@ -57,6 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       slug: true,
       specs: true,
       basePrice: true,
+      manufacturerId: true,
       category: { select: { id: true, name: true, slug: true } },
     },
   });
@@ -65,11 +121,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Product type not found", { status: 404 });
   }
 
-  return data({ productType });
+  if (!isAllowedShopifyManufacturerId(productType.manufacturerId)) {
+    throw new Response("This product type is not available for Shopify.", {
+      status: 403,
+    });
+  }
+
+  const linkedAccountId = await getArcadeAccountIdForShop(session.shop);
+  if (!linkedAccountId) {
+    throw redirect("/app/connect-arcade");
+  }
+
+  const firebaseCustomToken = await createClientAuthToken(linkedAccountId);
+
+  return data({
+    productType,
+    arcadeAccountId: linkedAccountId,
+    firebaseCustomToken,
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const intent = (formData.get("intent") as string) || "generate";
@@ -80,137 +153,123 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   if (!shop) {
-    return data({ error: "Shop not found for authenticated session" }, { status: 400 });
-  }
-
-  const arcadeAccountId = await resolveArcadeAccountId(session.shop, admin.graphql);
-
-  const prompt = formData.get("prompt") as string;
-  const productTypeId = formData.get("productTypeId") as string;
-
-  if (!prompt || !productTypeId) {
     return data(
-      { error: "Prompt and product type are required" },
+      { error: "Shop not found for authenticated session" },
       { status: 400 },
     );
   }
 
-  const inspirationColorHexcodes = parseInspirationHexCodesField(
-    formData.get("inspirationColorHexes") as string | null,
-  );
-
-  const productType = await db.productType.findUnique({
-    where: { id: productTypeId },
-    select: { slug: true },
-  });
-
-  if (!productType) {
-    return data({ error: "Product type not found" }, { status: 400 });
+  if (intent === "edit") {
+    return data(
+      { error: "Edit Design is not yet available." },
+      { status: 400 },
+    );
   }
 
-  let arcadeDocumentId: string | null = null;
-  let generationId: string | null = null;
+  if (intent !== "generate" && intent !== "regenerate") {
+    return data({ error: `Unknown intent: ${intent}` }, { status: 400 });
+  }
+
+  const prompt = (formData.get("prompt") as string | null)?.trim() ?? "";
+  if (!prompt) {
+    return data({ error: "Prompt is required" }, { status: 400 });
+  }
+
+  let productTypeId: string;
+  let parentProductId: string | null = null;
+
+  if (intent === "regenerate") {
+    parentProductId =
+      (formData.get("parentProductId") as string | null) ?? null;
+    if (!parentProductId) {
+      return data(
+        { error: "parentProductId is required to regenerate" },
+        { status: 400 },
+      );
+    }
+
+    const parent = await db.arcadeProduct.findFirst({
+      where: { id: parentProductId, shopId: shop.id },
+      select: { productTypeId: true },
+    });
+
+    if (!parent) {
+      return data({ error: "Parent design not found" }, { status: 404 });
+    }
+
+    productTypeId = parent.productTypeId;
+  } else {
+    productTypeId = (formData.get("productTypeId") as string | null) ?? "";
+    if (!productTypeId) {
+      return data({ error: "productTypeId is required" }, { status: 400 });
+    }
+  }
+
+  let arcadeAccountId: string;
+  try {
+    arcadeAccountId = await requireArcadeAccountIdForApi(session.shop);
+  } catch {
+    return data(
+      {
+        error:
+          "Connect your Arcade account before generating designs. Open Connect Arcade from the app menu.",
+      },
+      { status: 401 },
+    );
+  }
+
+  const inspirationImageUrls = parseInspirationImageUrls(
+    formData.get("inspirationImageUrls"),
+  );
+  const inspirationColorHexcodes = parseInspirationHexCodesField(
+    formData.get("inspirationColorHexes"),
+  );
+
+  const promptForGeneration =
+    transformShopifyPrintedTextileDesignPrompt(prompt);
 
   try {
     const generation = await requestDesignGeneration(
       {
-        prompt,
+        prompt: promptForGeneration,
+        ...(inspirationImageUrls ? { inspirationImageUrls } : {}),
         ...(inspirationColorHexcodes.length > 0
           ? { inspirationColorHexcodes }
           : {}),
       },
       arcadeAccountId,
     );
-    arcadeDocumentId = generation.firestoreDocumentId;
-    generationId = generation.dreamId ?? null;
+
+    const product = await db.arcadeProduct.create({
+      data: {
+        designPrompt: prompt,
+        arcadeDocumentId: generation.firestoreDocumentId,
+        generationId: generation.dreamId ?? null,
+        imageUrls: [],
+        shopId: shop.id,
+        productTypeId,
+        parentProductId,
+        status: "DRAFT",
+      },
+    });
+
+    return data({
+      productId: product.id,
+      arcadeDocumentId: generation.firestoreDocumentId,
+      generationId: generation.dreamId ?? null,
+    });
   } catch (err) {
     console.error("[AII-826] Arcade design generation failed:", err);
+    return data(
+      { error: "Design generation failed. Please try again." },
+      { status: 502 },
+    );
   }
-
-  const product = await db.arcadeProduct.create({
-    data: {
-      designPrompt: prompt,
-      arcadeDocumentId,
-      generationId,
-      imageUrls: [],
-      shopId: shop.id,
-      productTypeId,
-      status: "DRAFT",
-    },
-  });
-
-  return data({
-    productId: product.id,
-    arcadeDocumentId,
-    generationId,
-  });
 };
 
-function ChipDropdown({
-  icon,
-  label,
-  value,
-  options,
-  onSelect,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string | null;
-  options: string[];
-  onSelect: (val: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        className={`inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
-          value
-            ? "bg-gold-pale border-gold-border text-gold-dark"
-            : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
-        }`}
-        onClick={() => setOpen(!open)}
-      >
-        {icon}
-        {value || label}
-      </button>
-      {open && (
-        <div className="absolute top-[calc(100%+4px)] left-0 min-w-[180px] rounded-lg border border-card-border bg-card py-1.5 shadow-dropdown z-10">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              className={`block w-full px-3.5 py-2 border-none text-left cursor-pointer text-[13px] text-primary hover:bg-page ${
-                opt === value ? "font-semibold bg-page" : "bg-transparent font-normal"
-              }`}
-              onClick={() => {
-                onSelect(opt);
-                setOpen(false);
-              }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const ARTIST_STYLES = [
-  "Watercolor",
-  "Oil Painting",
-  "Minimalist",
-  "Abstract",
-  "Botanical",
-  "Geometric",
-  "Impressionist",
-  "Art Deco",
-];
-
 export default function PromptDesign() {
-  const { productType } = useLoaderData<typeof loader>();
+  const { productType, arcadeAccountId, firebaseCustomToken } =
+    useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{
     productId?: string;
@@ -220,38 +279,24 @@ export default function PromptDesign() {
   }>();
 
   const [prompt, setPrompt] = useState("");
-  const [inspirationColors, setInspirationColors] = useState<CreateInspirationColor[]>(
-    [],
-  );
+  const [inspirationColors, setInspirationColors] = useState<
+    CreateInspirationColor[]
+  >([]);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
-  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [editInstruction, setEditInstruction] = useState("");
 
   const [firestoreDocId, setFirestoreDocId] = useState<string | null>(null);
   const design = useDesignGeneration(firestoreDocId);
 
-  const referencePreviewUrl = useMemo(
-    () => (referenceImage ? URL.createObjectURL(referenceImage) : null),
-    [referenceImage],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (referencePreviewUrl) {
-        URL.revokeObjectURL(referencePreviewUrl);
-      }
-    };
-  }, [referencePreviewUrl]);
-
-  const typewriterHints = useMemo(
-    () => [
-      `Create a ${productType.name.toLowerCase()} with soft botanical motifs…`,
-      `Design ${productType.name.toLowerCase()} in warm earth tones and a hand-painted feel…`,
-      `Make a bold geometric ${productType.name.toLowerCase()} for a modern space…`,
-    ],
-    [productType.name],
-  );
+  const typewriterHints = [
+    `Create a ${productType.name.toLowerCase()} with soft botanical motifs…`,
+    `Design ${productType.name.toLowerCase()} in warm earth tones and a hand-painted feel…`,
+    `Make a bold geometric ${productType.name.toLowerCase()} for a modern space…`,
+  ];
 
   useEffect(() => {
     if (fetcher.data?.arcadeDocumentId) {
@@ -262,14 +307,23 @@ export default function PromptDesign() {
   const isSubmitting = fetcher.state !== "idle";
   const isMonitoring = design.status === "monitoring";
   const isLoading = isSubmitting || isMonitoring;
-  const canGenerate = prompt.trim().length > 0 && !isLoading;
+  const canGenerate = prompt.trim().length > 0 && !isLoading && !isUploading;
+  const canUploadMore =
+    uploadedImageUrls.length < MAX_INSPIRATION_IMAGES && !isUploading;
 
   const generatedImages = design.imageUrls;
   const savedProductId = fetcher.data?.productId ?? null;
+  const serverError = fetcher.data?.error ?? null;
   const hasResults = generatedImages.length > 0;
   const generationFailed =
+    serverError != null ||
     design.status === "failed" ||
     (savedProductId != null && !hasResults && !isLoading && firestoreDocId != null);
+  const errorMessage = serverError
+    ? serverError
+    : design.error
+      ? `Design generation failed: ${design.error}`
+      : "Design generation didn't return images this time. Your prompt has been saved — try Regenerate in the prompt bar below.";
   const mainImage = generatedImages[selectedImageIdx] ?? generatedImages[0];
 
   const handleGenerate = useCallback(() => {
@@ -289,13 +343,23 @@ export default function PromptDesign() {
         prompt: fullPrompt,
         productTypeId: productType.id,
         artist: selectedArtist || "",
+        inspirationImageUrls: JSON.stringify(uploadedImageUrls),
         inspirationColorHexes: JSON.stringify(
           inspirationColors.map((color) => color.hex),
         ),
       },
       { method: "post" },
     );
-  }, [canGenerate, prompt, inspirationColors, selectedArtist, productType.id, fetcher]);
+  }, [
+    canGenerate,
+    prompt,
+    selectedArtist,
+    uploadedImageUrls,
+    inspirationColors,
+    productType.id,
+    fetcher,
+    design,
+  ]);
 
   const handleRegenerate = useCallback(() => {
     if (!savedProductId || isLoading) return;
@@ -314,13 +378,58 @@ export default function PromptDesign() {
         parentProductId: savedProductId,
         prompt: fullPrompt,
         artist: selectedArtist || "",
+        inspirationImageUrls: JSON.stringify(uploadedImageUrls),
         inspirationColorHexes: JSON.stringify(
           inspirationColors.map((color) => color.hex),
         ),
       },
       { method: "post" },
     );
-  }, [savedProductId, isSubmitting, prompt, inspirationColors, selectedArtist, fetcher]);
+  }, [
+    savedProductId,
+    isLoading,
+    prompt,
+    selectedArtist,
+    uploadedImageUrls,
+    inspirationColors,
+    fetcher,
+    design,
+  ]);
+
+  const handleInspirationUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      const file = input.files?.[0];
+      input.value = "";
+      if (!file) return;
+      if (uploadedImageUrls.length >= MAX_INSPIRATION_IMAGES) return;
+
+      setIsUploading(true);
+      setUploadError(null);
+      try {
+        const url = await uploadInspirationImage(
+          file,
+          arcadeAccountId,
+          firebaseCustomToken,
+        );
+        setUploadedImageUrls((prev) => [...prev, url]);
+      } catch (err) {
+        console.error("[AII-826] Inspiration image upload failed:", err);
+        setUploadError(
+          err instanceof Error
+            ? `Image upload failed: ${err.message}`
+            : "Image upload failed. Please try again.",
+        );
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [arcadeAccountId, firebaseCustomToken, uploadedImageUrls.length],
+  );
+
+  const handleRemoveInspiration = useCallback((idx: number) => {
+    setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
 
   const canEdit =
     editInstruction.trim().length > 0 && savedProductId != null && !isLoading;
@@ -351,13 +460,12 @@ export default function PromptDesign() {
   }, [hasResults, handleRegenerate, handleGenerate]);
 
   return (
-    <Page>
+    <AppPage>
       <PageShell
         heading="Prompt Design"
         subtitle="Describe your design and let AI create it for you"
         backLabel="Back to Categories"
         onBack={() => navigate(`/app/categories/${productType.category.slug}`)}
-        maxWidth={720}
       >
         <div className="flex flex-col gap-4 pb-[min(40vh,24rem)] sm:pb-40">
           {isLoading && (
@@ -367,14 +475,33 @@ export default function PromptDesign() {
             />
           )}
 
-          {generationFailed && (
-            <ErrorBanner
-              message={
-                design.error
-                  ? `Design generation failed: ${design.error}`
-                  : "Design generation didn't return images this time. Your prompt has been saved — try Regenerate in the prompt bar below."
-              }
-            />
+          {generationFailed && <ErrorBanner message={errorMessage} />}
+
+          {uploadError && <ErrorBanner message={uploadError} />}
+
+          {uploadedImageUrls.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {uploadedImageUrls.map((url, idx) => (
+                <div
+                  key={url}
+                  className="relative size-16 rounded-lg overflow-hidden border border-card-border bg-surface-muted"
+                >
+                  <img
+                    src={url}
+                    alt={`Inspiration ${idx + 1}`}
+                    className="size-full object-cover block"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveInspiration(idx)}
+                    aria-label={`Remove inspiration image ${idx + 1}`}
+                    className="absolute top-1 right-1 inline-flex items-center justify-center size-5 rounded-full border-none bg-black/60 text-white cursor-pointer"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
           {hasResults && !isLoading && (
@@ -464,9 +591,9 @@ export default function PromptDesign() {
         prompt={prompt}
         onPromptChange={setPrompt}
         typewriterHints={typewriterHints}
-        referencePreviewUrl={referencePreviewUrl}
-        referenceLabel={referenceImage?.name ?? null}
-        onClearReference={() => setReferenceImage(null)}
+        referencePreviewUrl={null}
+        referenceLabel={null}
+        onClearReference={() => setUploadedImageUrls([])}
         inspirationColors={inspirationColors}
         onInspirationColorsChange={setInspirationColors}
         filterSlot={
@@ -493,24 +620,30 @@ export default function PromptDesign() {
             />
 
             <label
-              className={`inline-flex items-center gap-1.5 h-9 min-h-9 max-w-[11rem] shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] cursor-pointer transition-[background-color,border-color,color,box-shadow] sm:max-w-[14rem] ${
-                referenceImage
+              className={`inline-flex items-center gap-1.5 h-9 min-h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold shadow-[0_1px_0_rgba(15,15,15,0.04)] transition-[background-color,border-color,color,box-shadow] ${
+                uploadedImageUrls.length > 0
                   ? "border-gold-border bg-gold-pale text-gold-dark"
                   : "border-card-border bg-card/90 text-primary hover:border-card-border-hover"
-              }`}
+              } ${canUploadMore ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
             >
-              <Image className="size-3.5 shrink-0" />
+              {isUploading ? (
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
+              ) : (
+                <ImageIcon className="size-3.5 shrink-0" />
+              )}
               <span className="min-w-0 truncate">
-                {referenceImage ? referenceImage.name : "Image"}
+                {isUploading
+                  ? "Uploading…"
+                  : uploadedImageUrls.length > 0
+                    ? `Image (${uploadedImageUrls.length}/${MAX_INSPIRATION_IMAGES})`
+                    : "Image"}
               </span>
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  setReferenceImage(file);
-                }}
+                disabled={!canUploadMore}
+                onChange={handleInspirationUpload}
               />
             </label>
           </>
@@ -520,6 +653,6 @@ export default function PromptDesign() {
         isGenerating={isLoading}
         hasResults={hasResults}
       />
-    </Page>
+    </AppPage>
   );
 }

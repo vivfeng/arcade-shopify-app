@@ -34,7 +34,8 @@ model Session {
 model Shop {
   id                 String          @id @default(cuid())
   domain             String          @unique // e.g. "my-store.myshopify.com"
-  arcadeAccountId    String?         // Firebase UID — the only auth-related field stored
+  arcadeAccountId    String?         // Firebase UID — set only after explicit Arcade sign-in
+  arcadeLinkedAt     DateTime?       // When the merchant completed first-time link
   name               String?
   installedAt        DateTime        @default(now())
   onboardingComplete Boolean         @default(false)
@@ -93,18 +94,21 @@ enum ProductStatus {
 }
 
 model ArcadeProduct {
-  id                String        @id @default(cuid())
-  designPrompt      String?
-  arcadeDocumentId  String?       // Arcade backend document ID for Firestore polling
-  generationId      String?       // Arcade dream ID (from design-from-prompt-async response)
-  designVariantId   String?       // Arcade design variant UUID (required for flash edits)
-  imageUrls         Json          @default("[]") // AI-generated imagery URLs
-  shopifyProductGid String?       // e.g. "gid://shopify/Product/12345"
-  status            ProductStatus @default(DRAFT)
-  title             String?
-  description       String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                     String        @id @default(cuid())
+  designPrompt           String?
+  arcadeDocumentId       String?       // Arcade backend document ID for Firestore polling
+  generationId           String?       // Arcade dream ID (from design-from-prompt-async response)
+  designVariantId        String?       // Arcade design variant UUID (required for flash edits)
+  imageUrls              Json          @default("[]") // AI-generated imagery URLs
+  shopifyProductGid      String?       // e.g. "gid://shopify/Product/12345"
+  status                 ProductStatus @default(DRAFT)
+  title                  String?
+  description            String?
+  /// Entrepreneur commission rate on markup for this product (5–200, USD).
+  commissionRatePercent Decimal       @default(5) @db.Decimal(5, 2)
+  currencyCode          String        @default("USD")
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
 
   shopId        String
   shop          Shop        @relation(fields: [shopId], references: [id])
