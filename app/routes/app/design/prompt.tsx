@@ -315,6 +315,8 @@ export default function PromptDesign() {
   const savedProductId = fetcher.data?.productId ?? null;
   const serverError = fetcher.data?.error ?? null;
   const hasResults = generatedImages.length > 0;
+  const generationComplete =
+    design.status === "complete" && generatedImages.length > 0;
   const generationFailed =
     serverError != null ||
     design.status === "failed" ||
@@ -324,7 +326,13 @@ export default function PromptDesign() {
     : design.error
       ? `Design generation failed: ${design.error}`
       : "Design generation didn't return images this time. Your prompt has been saved — try Regenerate in the prompt bar below.";
-  const mainImage = generatedImages[selectedImageIdx] ?? generatedImages[0];
+
+  useEffect(() => {
+    if (generatedImages.length === 0) return;
+    setSelectedImageIdx((idx) =>
+      idx >= generatedImages.length ? generatedImages.length - 1 : idx,
+    );
+  }, [generatedImages.length]);
 
   const handleGenerate = useCallback(() => {
     if (!canGenerate) return;
@@ -504,36 +512,38 @@ export default function PromptDesign() {
             </div>
           )}
 
-          {hasResults && !isLoading && (
+          {generationComplete && !isLoading && (
             <div className="flex flex-col gap-4">
-              <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
-                <img
-                  src={mainImage}
-                  alt="Generated design"
-                  className="size-full object-cover"
-                />
-              </div>
-
-              {generatedImages.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto">
+              {generatedImages.length > 1 ? (
+                <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {generatedImages.map((url, idx) => (
                     <button
-                      key={url}
+                      key={`${url}-${idx}`}
                       type="button"
                       onClick={() => setSelectedImageIdx(idx)}
-                      className={`size-[72px] shrink-0 rounded-lg p-0 cursor-pointer overflow-hidden bg-surface-muted border-2 ${
+                      className={`relative aspect-square overflow-hidden rounded-xl border-2 bg-surface-muted p-0 text-left shadow-card cursor-pointer transition-[border-color,transform] duration-200 hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 ${
                         idx === selectedImageIdx
-                          ? "border-gold"
-                          : "border-transparent"
+                          ? "border-gold ring-1 ring-gold/25"
+                          : "border-card-border hover:border-card-border-hover"
                       }`}
                     >
                       <img
                         src={url}
-                        alt={`Variation ${idx + 1}`}
-                        className="size-full object-cover block"
+                        alt={`Generated design ${idx + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="size-full object-cover"
                       />
                     </button>
                   ))}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
+                  <img
+                    src={generatedImages[0]}
+                    alt="Generated design"
+                    className="size-full object-cover"
+                  />
                 </div>
               )}
 
