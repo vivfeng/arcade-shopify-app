@@ -1,5 +1,10 @@
-import type { ChangeEvent, KeyboardEvent, ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import type {
+  ChangeEvent,
+  KeyboardEvent,
+  ReactNode,
+  MutableRefObject,
+} from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
 import { useTypewriter } from "../../hooks/useTypewriter";
 import type { CreateInspirationColor } from "../../lib/inspirationColors";
@@ -20,6 +25,7 @@ type CreationPromptBarProps = {
   canGenerate: boolean;
   isGenerating: boolean;
   hasResults: boolean;
+  promptTextareaRef?: MutableRefObject<HTMLTextAreaElement | null>;
 };
 
 export function CreationPromptBar({
@@ -36,10 +42,21 @@ export function CreationPromptBar({
   canGenerate,
   isGenerating,
   hasResults,
+  promptTextareaRef,
 }: CreationPromptBarProps) {
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const hasInput = prompt.length > 0;
   const typewriterText = useTypewriter(typewriterHints, hasInput);
+
+  const assignPromptTextareaRef = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      promptRef.current = element;
+      if (promptTextareaRef) {
+        promptTextareaRef.current = element;
+      }
+    },
+    [promptTextareaRef],
+  );
 
   const isActive =
     hasInput ||
@@ -156,7 +173,7 @@ export function CreationPromptBar({
                 </div>
               ) : null}
               <textarea
-                ref={promptRef}
+                ref={assignPromptTextareaRef}
                 id="creation-prompt"
                 value={prompt}
                 onChange={handleChange}
