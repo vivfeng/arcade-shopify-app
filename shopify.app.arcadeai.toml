@@ -1,10 +1,4 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-#
-# Production config for the `arcadeai` Shopify app. The api_version here
-# MUST match the runtime pin in `app/shopify.server.ts` (ApiVersion enum)
-# and the dev config in `shopify.app.toml`. See ADR 0001 blocker B4 in
-# `docs/adr/0001-remix-to-react-router.md` — version bumps touch all
-# three files in a single commit.
 
 client_id = "a431ff949b793e2470cca4094f2bf97c"
 name = "Arcade.ai"
@@ -16,39 +10,35 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-# Production pin. Must match `ApiVersion.January26` in
-# `app/shopify.server.ts` and the `api_version` in `shopify.app.toml`.
-# See ADR 0001 blocker B4. Do NOT use 2025-01 or earlier (past sunset)
-# or fabricated values like the previous "2026-07" (not exported by
-# the installed @shopify/shopify-api@13).
-api_version = "2026-01"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/webhooks/customers/data-request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes-update"
 
   [[webhooks.subscriptions]]
-  compliance_topics = [ "customers/data_request" ]
-  uri = "/webhooks/customers/data-request"
-
-  [[webhooks.subscriptions]]
-  compliance_topics = [ "customers/redact" ]
-  uri = "/webhooks/customers/redact"
-
-  [[webhooks.subscriptions]]
-  compliance_topics = [ "shop/redact" ]
-  uri = "/webhooks/shop/redact"
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
 
   [[webhooks.subscriptions]]
   topics = [ "products/update" ]
   uri = "/webhooks/products/update"
 
 [access_scopes]
-scopes = "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments"
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = ""
 
 [auth]
 redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
