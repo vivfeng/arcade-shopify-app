@@ -36,6 +36,9 @@ export type {
 const ARCADE_API_URL = env.ARCADE_API_URL;
 const ARCADE_API_KEY = env.ARCADE_API_KEY;
 
+/** Maker-service checks this to apply Shopify-only rules (e.g. maker allowlist). */
+export const ARCADE_SHOPIFY_APP_HEADER = "arcade-shopify-app";
+
 const REQUEST_TIMEOUT_MS = 60_000;
 
 async function arcadeFetch(
@@ -53,6 +56,7 @@ async function arcadeFetch(
         "Authorization": `Bearer ${token}`,
         ...(ARCADE_API_KEY ? { "X-Vercel-Authorization": ARCADE_API_KEY } : {}),
         ...options.headers,
+        [ARCADE_SHOPIFY_APP_HEADER]: "1",
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
