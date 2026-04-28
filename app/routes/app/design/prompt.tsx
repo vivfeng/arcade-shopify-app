@@ -17,7 +17,8 @@ import {
   requireArcadeAccountIdForApi,
 } from "../../../services/arcade/arcadeApi.server";
 import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
 import { uploadInspirationImage } from "../../../services/firebase/storage";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
@@ -34,6 +35,9 @@ import {
   Sparkles,
   Loader2,
   X,
+  Wand2,
+  Crosshair,
+  Palette,
 } from "lucide-react";
 import { transformShopifyPrintedTextileDesignPrompt } from "../../../lib/shopifyDesignPromptTransform";
 import { ChipDropdown } from "./components";
@@ -51,6 +55,63 @@ const ARTIST_STYLES = [
 ];
 
 const INSPIRATION_HEX_ITEM = /^#([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
+
+type DesignResultCardProps = {
+  imageUrl: string;
+  imageIndex: number;
+  alt: string;
+  selected: boolean;
+  onSelect: () => void;
+  onOpenEditor: () => void;
+};
+
+function DesignResultCard({
+  imageUrl,
+  imageIndex,
+  alt,
+  selected,
+  onSelect,
+  onOpenEditor,
+}: DesignResultCardProps) {
+  return (
+    <div
+      className={`group relative aspect-square overflow-hidden rounded-xl border-2 bg-surface-muted shadow-card transition-[border-color,transform] duration-200 hover:scale-[1.02] ${
+        selected
+          ? "border-gold ring-1 ring-gold/25"
+          : "border-card-border hover:border-card-border-hover"
+      }`}
+    >
+      <img
+        src={imageUrl}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className="pointer-events-none absolute inset-0 size-full object-cover"
+      />
+      <button
+        type="button"
+        onClick={onSelect}
+        className="absolute inset-0 z-[1] cursor-pointer rounded-[inherit] border-none bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+        aria-pressed={selected}
+        aria-label={`Select generated design ${imageIndex + 1}`}
+      />
+      <div className="absolute right-3 top-3 z-20 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenEditor();
+          }}
+          className="inline-flex size-9 items-center justify-center rounded-full border border-card-border bg-primary text-card shadow-[0_1px_4px_rgba(15,15,15,0.12)] transition-[background-color,transform] hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+          aria-label={`Refine design ${imageIndex + 1}`}
+        >
+          <Pencil className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function parseInspirationHexCodesField(
   raw: FormDataEntryValue | null,
@@ -277,6 +338,9 @@ export default function PromptDesign() {
     generationId?: string;
     error?: string;
   }>();
+  const editFetcher = useFetcher<{ error?: string }>({
+    key: "prompt-design-edit",
+  });
 
   const [prompt, setPrompt] = useState("");
   const [inspirationColors, setInspirationColors] = useState<
@@ -288,6 +352,10 @@ export default function PromptDesign() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [editInstruction, setEditInstruction] = useState("");
+  const [editorModalOpen, setEditorModalOpen] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+  const editorModalTitleId = useId();
+  const editInstructionRef = useRef<HTMLTextAreaElement>(null);
 
   const [firestoreDocId, setFirestoreDocId] = useState<string | null>(null);
   const design = useDesignGeneration(firestoreDocId);
@@ -303,6 +371,32 @@ export default function PromptDesign() {
       setFirestoreDocId(fetcher.data.arcadeDocumentId);
     }
   }, [fetcher.data?.arcadeDocumentId]);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!editorModalOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      editInstructionRef.current?.focus();
+    }, 0);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setEditorModalOpen(false);
+        setEditInstruction("");
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editorModalOpen]);
 
   const isSubmitting = fetcher.state !== "idle";
   const isMonitoring = design.status === "monitoring";
@@ -342,6 +436,7 @@ export default function PromptDesign() {
 
     setSelectedImageIdx(0);
     setEditInstruction("");
+    setEditorModalOpen(false);
     setFirestoreDocId(null);
     design.reset();
 
@@ -377,6 +472,7 @@ export default function PromptDesign() {
 
     setSelectedImageIdx(0);
     setEditInstruction("");
+    setEditorModalOpen(false);
     setFirestoreDocId(null);
     design.reset();
 
@@ -439,15 +535,22 @@ export default function PromptDesign() {
     setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
-  const canEdit =
-    editInstruction.trim().length > 0 && savedProductId != null && !isLoading;
+  const isEditSubmitting = editFetcher.state !== "idle";
+  const canSubmitEdit =
+    editInstruction.trim().length > 0 &&
+    savedProductId != null &&
+    !isLoading &&
+    !isEditSubmitting;
+
+  const handleCloseEditorModal = useCallback(() => {
+    setEditorModalOpen(false);
+    setEditInstruction("");
+  }, []);
 
   const handleEdit = useCallback(() => {
-    if (!canEdit || !savedProductId) return;
+    if (!canSubmitEdit || !savedProductId) return;
 
-    setSelectedImageIdx(0);
-
-    fetcher.submit(
+    editFetcher.submit(
       {
         intent: "edit",
         parentProductId: savedProductId,
@@ -455,9 +558,11 @@ export default function PromptDesign() {
       },
       { method: "post" },
     );
+  }, [canSubmitEdit, savedProductId, editInstruction, editFetcher]);
 
-    setEditInstruction("");
-  }, [canEdit, savedProductId, editInstruction, fetcher]);
+  const editModalError = editFetcher.data?.error ?? null;
+  const editorPreviewUrl =
+    generatedImages[selectedImageIdx] ?? generatedImages[0] ?? null;
 
   const handlePromptBarGenerate = useCallback(() => {
     if (hasResults) {
@@ -517,59 +622,33 @@ export default function PromptDesign() {
               {generatedImages.length > 1 ? (
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {generatedImages.map((url, idx) => (
-                    <button
+                    <DesignResultCard
                       key={`${url}-${idx}`}
-                      type="button"
-                      onClick={() => setSelectedImageIdx(idx)}
-                      className={`relative aspect-square overflow-hidden rounded-xl border-2 bg-surface-muted p-0 text-left shadow-card cursor-pointer transition-[border-color,transform] duration-200 hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 ${
-                        idx === selectedImageIdx
-                          ? "border-gold ring-1 ring-gold/25"
-                          : "border-card-border hover:border-card-border-hover"
-                      }`}
-                    >
-                      <img
-                        src={url}
-                        alt={`Generated design ${idx + 1}`}
-                        loading="lazy"
-                        decoding="async"
-                        className="size-full object-cover"
-                      />
-                    </button>
+                      imageUrl={url}
+                      imageIndex={idx}
+                      alt={`Generated design ${idx + 1}`}
+                      selected={idx === selectedImageIdx}
+                      onSelect={() => setSelectedImageIdx(idx)}
+                      onOpenEditor={() => {
+                        setSelectedImageIdx(idx);
+                        setEditorModalOpen(true);
+                      }}
+                    />
                   ))}
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card aspect-square flex items-center justify-center">
-                  <img
-                    src={generatedImages[0]}
-                    alt="Generated design"
-                    className="size-full object-cover"
-                  />
-                </div>
+                <DesignResultCard
+                  imageUrl={generatedImages[0]}
+                  imageIndex={0}
+                  alt="Generated design"
+                  selected={false}
+                  onSelect={() => setSelectedImageIdx(0)}
+                  onOpenEditor={() => {
+                    setSelectedImageIdx(0);
+                    setEditorModalOpen(true);
+                  }}
+                />
               )}
-
-              <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    placeholder='Describe a change… e.g. "make it more red" or "change floral to geometric"'
-                    value={editInstruction}
-                    onChange={(e) => setEditInstruction(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && canEdit) handleEdit();
-                    }}
-                    className="flex-1 h-10 px-3 rounded-lg border border-card-border bg-transparent text-sm text-primary outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleEdit}
-                    disabled={!canEdit}
-                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border-none bg-primary text-card text-sm font-semibold cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Pencil className="size-3.5" />
-                    Edit Design
-                  </button>
-                </div>
-              </div>
 
               <div className="flex gap-2 items-center">
                 <button
@@ -596,6 +675,183 @@ export default function PromptDesign() {
           )}
         </div>
       </PageShell>
+
+      {portalReady &&
+        editorModalOpen &&
+        editorPreviewUrl &&
+        typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6">
+              <button
+                type="button"
+                className="absolute inset-0 cursor-pointer border-none bg-black/45 p-0"
+                aria-label="Close editor"
+                onClick={handleCloseEditorModal}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={editorModalTitleId}
+                className="relative z-10 flex max-h-[min(92vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-[0_16px_48px_rgba(15,15,15,0.18)]"
+              >
+                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-card-border px-4 py-3 sm:px-5">
+                  <div className="min-w-0">
+                    <h2
+                      id={editorModalTitleId}
+                      className="m-0 font-display text-lg font-semibold tracking-tight text-primary"
+                    >
+                      Refine design
+                    </h2>
+                    <p className="mb-0 mt-1 text-[13px] leading-snug text-subdued">
+                      Descriptive changes run from this dialog. Mask-based precise
+                      edit and cluster recolor match Arcade Lab’s Refine page; those
+                      flows are not wired into Shopify yet.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseEditorModal}
+                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-card-border bg-card text-primary hover:bg-surface-muted"
+                    aria-label="Close"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                  <div className="overflow-hidden rounded-lg border border-card-border bg-surface-muted">
+                    <img
+                      src={editorPreviewUrl}
+                      alt="Design being edited"
+                      className="aspect-square w-full object-cover"
+                    />
+                  </div>
+                  {editModalError ? (
+                    <div className="mt-4">
+                      <ErrorBanner message={editModalError} />
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 space-y-0 rounded-lg border border-card-border bg-card/50">
+                    <details
+                      open
+                      className="group border-b border-card-border px-3 last:border-b-0 sm:px-4"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
+                        <Wand2
+                          className="size-4 shrink-0 text-gold-dark"
+                          aria-hidden="true"
+                        />
+                        Descriptive edit
+                      </summary>
+                      <div className="space-y-3 pb-4 pl-6 sm:pl-7">
+                        <p className="m-0 text-[13px] leading-snug text-subdued">
+                          Describe a change for the entire image (matches Arcade
+                          Lab’s descriptive refine).
+                        </p>
+                        <label className="block">
+                          <span className="sr-only">Edit instructions</span>
+                          <textarea
+                            ref={editInstructionRef}
+                            id="design-edit-instructions"
+                            rows={4}
+                            value={editInstruction}
+                            onChange={(e) => setEditInstruction(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === "Enter" &&
+                                (e.metaKey || e.ctrlKey) &&
+                                canSubmitEdit
+                              ) {
+                                e.preventDefault();
+                                handleEdit();
+                              }
+                            }}
+                            placeholder="Describe the change you want to make to the entire pattern…"
+                            className="w-full resize-y rounded-lg border border-card-border bg-transparent px-3 py-2.5 text-sm leading-relaxed text-primary outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleEdit}
+                          disabled={!canSubmitEdit}
+                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border-none bg-primary px-5 text-sm font-semibold text-card disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {isEditSubmitting ? (
+                            <Loader2
+                              className="size-4 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <Wand2 className="size-4" aria-hidden="true" />
+                          )}
+                          {isEditSubmitting ? "Generating…" : "Generate"}
+                        </button>
+                        <p className="m-0 text-[11px] text-subdued">
+                          Shortcut: ⌘ or Ctrl + Enter
+                        </p>
+                      </div>
+                    </details>
+
+                    <details className="group border-b border-card-border px-3 last:border-b-0 sm:px-4">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
+                        <Crosshair
+                          className="size-4 shrink-0 text-gold-dark"
+                          aria-hidden="true"
+                        />
+                        Precise edit
+                      </summary>
+                      <div className="space-y-2 pb-4 pl-6 text-[13px] leading-snug text-subdued sm:pl-7">
+                        <p className="m-0">
+                          In Arcade Lab you paint a mask on the image and describe
+                          the change for that region only; the server fuses mask +
+                          prompt via an inpaint modal.
+                        </p>
+                        <p className="m-0">
+                          This embedded app does not include the mask canvas or
+                          edit session APIs yet—use Arcade Lab → Refine for precise
+                          edits.
+                        </p>
+                      </div>
+                    </details>
+
+                    <details className="group px-3 sm:px-4">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
+                        <Palette
+                          className="size-4 shrink-0 text-gold-dark"
+                          aria-hidden="true"
+                        />
+                        Recolor
+                      </summary>
+                      <div className="space-y-2 pb-4 pl-6 text-[13px] leading-snug text-subdued sm:pl-7">
+                        <p className="m-0">
+                          Arcade Lab detects dominant colors, lets you map each
+                          cluster to a new color (including Pantone picks), then
+                          applies the recolor in one step.
+                        </p>
+                        <p className="m-0">
+                          That prepare-and-apply pipeline is not available in the
+                          Shopify app until the same backend endpoints are exposed
+                          here.
+                        </p>
+                      </div>
+                    </details>
+                  </div>
+
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleCloseEditorModal}
+                      className="h-10 rounded-lg border border-card-border bg-card px-4 text-sm font-medium text-secondary"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <CreationPromptBar
         prompt={prompt}
