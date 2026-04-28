@@ -17,8 +17,7 @@ import {
   requireArcadeAccountIdForApi,
 } from "../../../services/arcade/arcadeApi.server";
 import { isAllowedShopifyManufacturerId } from "../../../lib/shopifyChannelRules";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDesignGeneration } from "../../../hooks/useDesignGeneration";
 import { uploadInspirationImage } from "../../../services/firebase/storage";
 import { LoadingCard } from "../../../components/ui/LoadingCard";
@@ -35,9 +34,6 @@ import {
   Sparkles,
   Loader2,
   X,
-  Wand2,
-  Crosshair,
-  Palette,
 } from "lucide-react";
 import { transformShopifyPrintedTextileDesignPrompt } from "../../../lib/shopifyDesignPromptTransform";
 import { ChipDropdown } from "./components";
@@ -62,7 +58,7 @@ type DesignResultCardProps = {
   alt: string;
   selected: boolean;
   onSelect: () => void;
-  onOpenEditor: () => void;
+  onRefineInPrompt: () => void;
 };
 
 function DesignResultCard({
@@ -71,7 +67,7 @@ function DesignResultCard({
   alt,
   selected,
   onSelect,
-  onOpenEditor,
+  onRefineInPrompt,
 }: DesignResultCardProps) {
   return (
     <div
@@ -101,10 +97,10 @@ function DesignResultCard({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onOpenEditor();
+            onRefineInPrompt();
           }}
           className="inline-flex size-9 items-center justify-center rounded-full border border-card-border bg-primary text-card shadow-[0_1px_4px_rgba(15,15,15,0.12)] transition-[background-color,transform] hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-          aria-label={`Refine design ${imageIndex + 1}`}
+          aria-label="Refine in prompt"
         >
           <Pencil className="size-4" aria-hidden="true" />
         </button>
@@ -220,13 +216,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  if (intent === "edit") {
-    return data(
-      { error: "Edit Design is not yet available." },
-      { status: 400 },
-    );
-  }
-
   if (intent !== "generate" && intent !== "regenerate") {
     return data({ error: `Unknown intent: ${intent}` }, { status: 400 });
   }
@@ -338,10 +327,6 @@ export default function PromptDesign() {
     generationId?: string;
     error?: string;
   }>();
-  const editFetcher = useFetcher<{ error?: string }>({
-    key: "prompt-design-edit",
-  });
-
   const [prompt, setPrompt] = useState("");
   const [inspirationColors, setInspirationColors] = useState<
     CreateInspirationColor[]
@@ -351,52 +336,16 @@ export default function PromptDesign() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
-  const [editInstruction, setEditInstruction] = useState("");
-  const [editorModalOpen, setEditorModalOpen] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
-  const editorModalTitleId = useId();
-  const editInstructionRef = useRef<HTMLTextAreaElement>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [firestoreDocId, setFirestoreDocId] = useState<string | null>(null);
   const design = useDesignGeneration(firestoreDocId);
-
-  const typewriterHints = [
-    `Create a ${productType.name.toLowerCase()} with soft botanical motifs…`,
-    `Design ${productType.name.toLowerCase()} in warm earth tones and a hand-painted feel…`,
-    `Make a bold geometric ${productType.name.toLowerCase()} for a modern space…`,
-  ];
 
   useEffect(() => {
     if (fetcher.data?.arcadeDocumentId) {
       setFirestoreDocId(fetcher.data.arcadeDocumentId);
     }
   }, [fetcher.data?.arcadeDocumentId]);
-
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!editorModalOpen) return;
-    const focusTimer = window.setTimeout(() => {
-      editInstructionRef.current?.focus();
-    }, 0);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setEditorModalOpen(false);
-        setEditInstruction("");
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.body.style.overflow = prevOverflow;
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [editorModalOpen]);
 
   const isSubmitting = fetcher.state !== "idle";
   const isMonitoring = design.status === "monitoring";
@@ -421,6 +370,21 @@ export default function PromptDesign() {
       ? `Design generation failed: ${design.error}`
       : "Design generation didn't return images this time. Your prompt has been saved — try Regenerate in the prompt bar below.";
 
+  const typewriterHints = useMemo(() => {
+    if (hasResults) {
+      return [
+        "Describe tweaks in the prompt bar—e.g. softer blues, larger florals…",
+        "Add detail like scale, contrast, or motif style, then tap Regenerate…",
+        "Refine the mood: minimal, bold, vintage—then regenerate from below…",
+      ];
+    }
+    return [
+      `Create a ${productType.name.toLowerCase()} with soft botanical motifs…`,
+      `Design ${productType.name.toLowerCase()} in warm earth tones and a hand-painted feel…`,
+      `Make a bold geometric ${productType.name.toLowerCase()} for a modern space…`,
+    ];
+  }, [hasResults, productType.name]);
+
   useEffect(() => {
     if (generatedImages.length === 0) return;
     setSelectedImageIdx((idx) =>
@@ -435,8 +399,6 @@ export default function PromptDesign() {
     if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
 
     setSelectedImageIdx(0);
-    setEditInstruction("");
-    setEditorModalOpen(false);
     setFirestoreDocId(null);
     design.reset();
 
@@ -471,8 +433,6 @@ export default function PromptDesign() {
     if (selectedArtist) fullPrompt += `\nStyle: ${selectedArtist}`;
 
     setSelectedImageIdx(0);
-    setEditInstruction("");
-    setEditorModalOpen(false);
     setFirestoreDocId(null);
     design.reset();
 
@@ -534,35 +494,6 @@ export default function PromptDesign() {
   const handleRemoveInspiration = useCallback((idx: number) => {
     setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
   }, []);
-
-  const isEditSubmitting = editFetcher.state !== "idle";
-  const canSubmitEdit =
-    editInstruction.trim().length > 0 &&
-    savedProductId != null &&
-    !isLoading &&
-    !isEditSubmitting;
-
-  const handleCloseEditorModal = useCallback(() => {
-    setEditorModalOpen(false);
-    setEditInstruction("");
-  }, []);
-
-  const handleEdit = useCallback(() => {
-    if (!canSubmitEdit || !savedProductId) return;
-
-    editFetcher.submit(
-      {
-        intent: "edit",
-        parentProductId: savedProductId,
-        editInstruction: editInstruction.trim(),
-      },
-      { method: "post" },
-    );
-  }, [canSubmitEdit, savedProductId, editInstruction, editFetcher]);
-
-  const editModalError = editFetcher.data?.error ?? null;
-  const editorPreviewUrl =
-    generatedImages[selectedImageIdx] ?? generatedImages[0] ?? null;
 
   const handlePromptBarGenerate = useCallback(() => {
     if (hasResults) {
@@ -629,9 +560,12 @@ export default function PromptDesign() {
                       alt={`Generated design ${idx + 1}`}
                       selected={idx === selectedImageIdx}
                       onSelect={() => setSelectedImageIdx(idx)}
-                      onOpenEditor={() => {
+                      onRefineInPrompt={() => {
                         setSelectedImageIdx(idx);
-                        setEditorModalOpen(true);
+                        promptTextareaRef.current?.focus();
+                        promptTextareaRef.current?.scrollIntoView({
+                          block: "nearest",
+                        });
                       }}
                     />
                   ))}
@@ -641,14 +575,21 @@ export default function PromptDesign() {
                   imageUrl={generatedImages[0]}
                   imageIndex={0}
                   alt="Generated design"
-                  selected={false}
+                  selected
                   onSelect={() => setSelectedImageIdx(0)}
-                  onOpenEditor={() => {
+                  onRefineInPrompt={() => {
                     setSelectedImageIdx(0);
-                    setEditorModalOpen(true);
+                    promptTextareaRef.current?.focus();
+                    promptTextareaRef.current?.scrollIntoView({
+                      block: "nearest",
+                    });
                   }}
                 />
               )}
+
+              <p className="m-0 text-[13px] leading-snug text-subdued">
+                Describe tweaks in the prompt bar below, then use Regenerate.
+              </p>
 
               <div className="flex gap-2 items-center">
                 <button
@@ -676,186 +617,10 @@ export default function PromptDesign() {
         </div>
       </PageShell>
 
-      {portalReady &&
-        editorModalOpen &&
-        editorPreviewUrl &&
-        typeof document !== "undefined"
-        ? createPortal(
-            <div className="fixed inset-0 z-[200] flex items-end justify-center p-3 sm:items-center sm:p-6">
-              <button
-                type="button"
-                className="absolute inset-0 cursor-pointer border-none bg-black/45 p-0"
-                aria-label="Close editor"
-                onClick={handleCloseEditorModal}
-              />
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={editorModalTitleId}
-                className="relative z-10 flex max-h-[min(92vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-[0_16px_48px_rgba(15,15,15,0.18)]"
-              >
-                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-card-border px-4 py-3 sm:px-5">
-                  <div className="min-w-0">
-                    <h2
-                      id={editorModalTitleId}
-                      className="m-0 font-display text-lg font-semibold tracking-tight text-primary"
-                    >
-                      Refine design
-                    </h2>
-                    <p className="mb-0 mt-1 text-[13px] leading-snug text-subdued">
-                      Descriptive changes run from this dialog. Mask-based precise
-                      edit and cluster recolor match Arcade Lab’s Refine page; those
-                      flows are not wired into Shopify yet.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCloseEditorModal}
-                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-card-border bg-card text-primary hover:bg-surface-muted"
-                    aria-label="Close"
-                  >
-                    <X className="size-4" aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                  <div className="overflow-hidden rounded-lg border border-card-border bg-surface-muted">
-                    <img
-                      src={editorPreviewUrl}
-                      alt="Design being edited"
-                      className="aspect-square w-full object-cover"
-                    />
-                  </div>
-                  {editModalError ? (
-                    <div className="mt-4">
-                      <ErrorBanner message={editModalError} />
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 space-y-0 rounded-lg border border-card-border bg-card/50">
-                    <details
-                      open
-                      className="group border-b border-card-border px-3 last:border-b-0 sm:px-4"
-                    >
-                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-                        <Wand2
-                          className="size-4 shrink-0 text-gold-dark"
-                          aria-hidden="true"
-                        />
-                        Descriptive edit
-                      </summary>
-                      <div className="space-y-3 pb-4 pl-6 sm:pl-7">
-                        <p className="m-0 text-[13px] leading-snug text-subdued">
-                          Describe a change for the entire image (matches Arcade
-                          Lab’s descriptive refine).
-                        </p>
-                        <label className="block">
-                          <span className="sr-only">Edit instructions</span>
-                          <textarea
-                            ref={editInstructionRef}
-                            id="design-edit-instructions"
-                            rows={4}
-                            value={editInstruction}
-                            onChange={(e) => setEditInstruction(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === "Enter" &&
-                                (e.metaKey || e.ctrlKey) &&
-                                canSubmitEdit
-                              ) {
-                                e.preventDefault();
-                                handleEdit();
-                              }
-                            }}
-                            placeholder="Describe the change you want to make to the entire pattern…"
-                            className="w-full resize-y rounded-lg border border-card-border bg-transparent px-3 py-2.5 text-sm leading-relaxed text-primary outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleEdit}
-                          disabled={!canSubmitEdit}
-                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border-none bg-primary px-5 text-sm font-semibold text-card disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {isEditSubmitting ? (
-                            <Loader2
-                              className="size-4 animate-spin"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <Wand2 className="size-4" aria-hidden="true" />
-                          )}
-                          {isEditSubmitting ? "Generating…" : "Generate"}
-                        </button>
-                        <p className="m-0 text-[11px] text-subdued">
-                          Shortcut: ⌘ or Ctrl + Enter
-                        </p>
-                      </div>
-                    </details>
-
-                    <details className="group border-b border-card-border px-3 last:border-b-0 sm:px-4">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-                        <Crosshair
-                          className="size-4 shrink-0 text-gold-dark"
-                          aria-hidden="true"
-                        />
-                        Precise edit
-                      </summary>
-                      <div className="space-y-2 pb-4 pl-6 text-[13px] leading-snug text-subdued sm:pl-7">
-                        <p className="m-0">
-                          In Arcade Lab you paint a mask on the image and describe
-                          the change for that region only; the server fuses mask +
-                          prompt via an inpaint modal.
-                        </p>
-                        <p className="m-0">
-                          This embedded app does not include the mask canvas or
-                          edit session APIs yet—use Arcade Lab → Refine for precise
-                          edits.
-                        </p>
-                      </div>
-                    </details>
-
-                    <details className="group px-3 sm:px-4">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-                        <Palette
-                          className="size-4 shrink-0 text-gold-dark"
-                          aria-hidden="true"
-                        />
-                        Recolor
-                      </summary>
-                      <div className="space-y-2 pb-4 pl-6 text-[13px] leading-snug text-subdued sm:pl-7">
-                        <p className="m-0">
-                          Arcade Lab detects dominant colors, lets you map each
-                          cluster to a new color (including Pantone picks), then
-                          applies the recolor in one step.
-                        </p>
-                        <p className="m-0">
-                          That prepare-and-apply pipeline is not available in the
-                          Shopify app until the same backend endpoints are exposed
-                          here.
-                        </p>
-                      </div>
-                    </details>
-                  </div>
-
-                  <div className="mt-5 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleCloseEditorModal}
-                      className="h-10 rounded-lg border border-card-border bg-card px-4 text-sm font-medium text-secondary"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-
       <CreationPromptBar
         prompt={prompt}
         onPromptChange={setPrompt}
+        promptTextareaRef={promptTextareaRef}
         typewriterHints={typewriterHints}
         referencePreviewUrl={null}
         referenceLabel={null}
