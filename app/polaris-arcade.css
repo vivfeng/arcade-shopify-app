@@ -1,0 +1,84 @@
+/**
+ * Polaris tokens tuned to match b2b Arcade Lab (warm fog / paper / ink).
+ * Must load after @shopify/polaris/build/esm/styles.css.
+ */
+:root,
+.p-theme-light {
+  /* Page + surfaces (fog, linen, white) */
+  --p-color-bg: hsl(34 30% 95%);
+  --p-color-bg-surface: hsl(0 0% 100%);
+  --p-color-bg-surface-hover: hsl(34 22% 97%);
+  --p-color-bg-surface-active: hsl(34 18% 94%);
+  --p-color-bg-surface-selected: hsl(46 24% 92%);
+  --p-color-bg-surface-secondary: hsl(46 26% 93%);
+  --p-color-bg-surface-secondary-hover: hsl(46 22% 90%);
+  --p-color-bg-surface-secondary-active: hsl(46 20% 87%);
+  --p-color-bg-surface-tertiary: hsl(46 20% 91%);
+  --p-color-bg-surface-tertiary-hover: hsl(46 18% 88%);
+  --p-color-bg-surface-tertiary-active: hsl(46 16% 85%);
+
+  --p-color-bg-fill: hsl(0 0% 100%);
+  --p-color-bg-fill-hover: hsl(34 22% 98%);
+  --p-color-bg-fill-active: hsl(34 18% 96%);
+  --p-color-bg-fill-secondary: hsl(46 24% 93%);
+  --p-color-bg-fill-secondary-hover: hsl(46 20% 90%);
+  --p-color-bg-fill-secondary-active: hsl(46 18% 87%);
+  --p-color-bg-fill-tertiary: hsl(0 0% 90%);
+
+  /* Text (ink, mud, stone) */
+  --p-color-text: hsl(0 0% 6%);
+  --p-color-text-secondary: hsl(48 2% 40%);
+  --p-color-text-brand: hsl(36 8% 25%);
+
+  --p-color-icon: hsl(36 8% 28%);
+  --p-color-icon-hover: hsl(0 0% 6%);
+  --p-color-icon-active: hsl(0 0% 6%);
+  --p-color-icon-secondary: hsl(48 2% 45%);
+
+  /* Borders (paper / steel) */
+  --p-color-border: hsl(53 12% 85%);
+  --p-color-border-secondary: hsl(46 18% 88%);
+  --p-color-border-hover: hsl(0 0% 62%);
+  --p-color-input-border: hsl(0 0% 55%);
+  --p-color-input-border-hover: hsl(36 8% 32%);
+  --p-color-input-border-active: hsl(0 0% 6%);
+  --p-color-input-bg-surface: hsl(0 0% 100%);
+
+  /* Primary actions = ink (Lab primary) */
+  --p-color-bg-fill-brand: hsl(0 0% 6%);
+  --p-color-bg-fill-brand-hover: hsl(0 0% 12%);
+  --p-color-bg-fill-brand-active: hsl(0 0% 18%);
+  --p-color-text-brand-on-bg-fill: hsl(0 0% 100%);
+
+  /* Links — warm stone, not default Shopify blue */
+  --p-color-text-link: hsl(36 10% 28%);
+  --p-color-text-link-hover: hsl(0 0% 6%);
+  --p-color-text-link-active: hsl(0 0% 6%);
+  --p-color-border-focus: hsl(41 52% 57%);
+
+  /* Type — Instrument + Recoleta */
+  --p-font-family-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --p-text-heading-3xl-font-family: "Recoleta", Georgia, "Times New Roman", serif;
+  --p-text-heading-2xl-font-family: "Recoleta", Georgia, "Times New Roman", serif;
+  --p-text-heading-xl-font-family: "Recoleta", Georgia, "Times New Roman", serif;
+  --p-text-heading-lg-font-family: "Recoleta", Georgia, "Times New Roman", serif;
+  --p-text-heading-md-font-family: "Recoleta", Georgia, "Times New Roman", serif;
+
+  /* Softer radii (Lab field + panel) */
+  --p-border-radius-200: 0.5rem;
+  --p-border-radius-300: 0.75rem;
+  --p-border-radius-400: 1rem;
+  --p-border-radius-750: 0.9375rem;
+
+  /* Page shadow language */
+  --p-shadow-200: 0 0 0 1px rgba(69, 65, 59, 0.06),
+    0 4px 12px rgba(15, 15, 15, 0.05);
+  --p-shadow-300: 0 0 0 1px rgba(69, 65, 59, 0.06),
+    0 8px 18px rgba(15, 15, 15, 0.06);
+}
+
+html,
+body {
+  background-color: var(--p-color-bg);
+}
