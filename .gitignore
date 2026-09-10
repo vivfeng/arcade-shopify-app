@@ -19,3 +19,6 @@ dist
 *.key
 *.p12
 firebase-service-account*.json
+
+# Claude Code per-user local settings (can contain pasted credentials) — never commit
+.claude/settings.local.json
